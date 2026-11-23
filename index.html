@@ -1,211 +1,452 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <title>HIDE IN THE DARK</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <!-- Phaser renders into this container -->
-  <div id="game-container"></div>
-  <div id="vignette"></div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
 
-  <div id="hud" class="hidden">
-    <!-- left column: role / loot / alert -->
-    <div class="hud-col left">
-      <div class="chip role"><i class="ic" data-icon="mask"></i><span>THIEF</span></div>
-      <div class="chip" id="hud-loot-box"><i class="ic" data-icon="chest"></i><span id="hud-loot">0/3</span></div>
-      <div class="chip alert-0" id="hud-alert-box"><i class="ic" data-icon="alert"></i><span id="hud-alert">LOW</span></div>
-    </div>
-    <!-- centre: timer + stamina -->
-    <div class="hud-col center">
-      <div class="timer" id="hud-time-box"><i class="ic" data-icon="clock"></i><span id="hud-time">04:00</span></div>
-      <div class="stamina" id="hud-stamina-box"><i class="ic" data-icon="bolt"></i><div class="bar"><div class="fill" id="hud-stamina-fill"></div></div></div>
-    </div>
-    <!-- right column: whistle / noise / buttons -->
-    <div class="hud-col right">
-      <div class="chip ready" id="hud-whistle-box" title="Whistle [Q]"><i class="ic" data-icon="whistle"></i><span id="hud-whistle-text">READY</span></div>
-      <div class="chip noise" title="How much noise you are making"><i class="ic" data-icon="noise"></i><span id="hud-noise"><b></b><b></b><b></b><b></b></span></div>
-      <div class="hud-btns">
-        <button class="icon-btn" id="btn-pause" title="Pause (P)" aria-label="Pause"><i class="ic" data-icon="pause"></i></button>
-        <button class="icon-btn" id="btn-restart" title="Restart (R)" aria-label="Restart"><i class="ic" data-icon="refresh"></i></button>
-        <button class="icon-btn" id="btn-gear" title="Settings" aria-label="Settings"><i class="ic" data-icon="gear"></i></button>
-      </div>
-    </div>
-  </div>
+    <!-- Primary SEO -->
+    <title>Hide in the Dark – Pixel Art Stealth Horror Game</title>
+    <meta
+      name="title"
+      content="Hide in the Dark – Pixel Art Stealth Horror Game"
+    />
+    <meta
+      name="description"
+      content="Enter a dark abandoned mansion in Hide in the Dark, a thrilling pixel art stealth horror game. Sneak past security guards, avoid flashlights, collect valuable loot, use distractions and escape without getting caught."
+    />
+    <meta name="author" content="Hide in the Dark" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="language" content="English" />
+    <meta name="application-name" content="Hide in the Dark" />
+    <meta name="theme-color" content="#080b16" />
+    <meta name="color-scheme" content="dark" />
 
-  <div id="prompt" class="hidden"></div>
-  <div id="toast" class="hidden"></div>
+    <!-- Game Keywords -->
+    <meta
+      name="keywords"
+      content="Hide in the Dark, stealth horror game, pixel art game, browser horror game, top down stealth game, 2D horror game, HTML5 game, free online stealth game, pixel art horror, escape game, thief game, flashlight horror game, mansion horror game"
+    />
 
-  <!-- ===================== Touch controls (touch devices only) ===================== -->
-  <div id="touch-ui" class="hidden">
-    <div id="joy"><div id="joy-stick"></div></div>
-    <div id="touch-buttons">
-      <!-- contextual button: only visible next to a hiding spot / loot; icon + label change -->
-      <button id="t-act" class="tbtn act hidden" data-kind="hide" aria-label="Action">
-        <i class="ic k-loot" data-icon="hand"></i><i class="ic k-hide" data-icon="hide"></i><i class="ic k-leave" data-icon="exit"></i>
-        <span class="tl" id="t-act-label">HIDE</span>
-      </button>
-      <div class="trow">
-        <button id="t-whistle" class="tbtn" aria-label="Whistle"><i class="ic" data-icon="whistle"></i><span class="tl">WHISTLE</span></button>
-        <button id="t-run" class="tbtn" aria-label="Run (hold)"><i class="ic" data-icon="run"></i><span class="tl">RUN</span></button>
-      </div>
-    </div>
-  </div>
+    <!-- Open Graph / Facebook / Discord -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Hide in the Dark – Can You Escape?" />
+    <meta
+      property="og:description"
+      content="Sneak through a haunted mansion, avoid deadly flashlight beams, steal valuable loot and escape before the guards catch you. Play Hide in the Dark!"
+    />
+    <meta property="og:site_name" content="HIDE IN THE DARK" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:image" content="/images/hide-in-the-dark-og.png" />
+    <meta
+      property="og:image:alt"
+      content="Hide in the Dark pixel art stealth horror game"
+    />
 
-  <!-- ===================== Screens ===================== -->
-  <div id="loading"><div id="loading-text">LOADING THE MANSION...</div></div>
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="Hide in the Dark – Pixel Art Stealth Horror"
+    />
+    <meta
+      name="twitter:description"
+      content="Hide in the shadows. Avoid the guards. Steal the loot. Escape the mansion."
+    />
+    <meta name="twitter:image" content="/images/hide-in-the-dark-og.png" />
 
-  <!-- MAIN MENU -->
-  <section id="screen-menu" class="screen menu">
-    <div class="menu-bg" id="menu-bg"></div>
-    <div class="menu-beam b1"></div><div class="menu-beam b2"></div>
-    <div class="menu-fog"></div>
-    <div class="dust" id="dust"></div>
-    <div class="moon"></div>
+    <!-- Mobile & Browser -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="format-detection" content="telephone=no" />
 
-    <div class="menu-layout">
-      <div class="menu-left">
-        <div class="logo">
-          <div class="logo-top">HIDE IN</div>
-          <div class="logo-main">THE DARK</div>
-          <div class="logo-sub">STEALTH &bull; HEIST &bull; ESCAPE</div>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="assets/icon.png" />
+    <link rel="apple-touch-icon" href="assets/icon.png" />
+
+    <!-- Performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Fonts -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css" />
+  </head>
+
+  <body>
+    <!-- Phaser renders into this container -->
+    <div id="game-container"></div>
+    <div id="vignette"></div>
+
+    <div id="hud" class="hidden">
+      <!-- left column: role / loot / alert -->
+      <div class="hud-col left">
+        <div class="chip role">
+          <i class="ic" data-icon="mask"></i><span>THIEF</span>
         </div>
-        <nav class="menu-list">
-          <button class="mbtn primary" id="btn-play"><i class="ic" data-icon="play"></i><span>PLAY</span></button>
-          <button class="mbtn" id="btn-settings"><i class="ic" data-icon="gear"></i><span>SETTINGS</span></button>
-          <button class="mbtn" id="btn-howto"><i class="ic" data-icon="book"></i><span>HOW TO PLAY</span></button>
-        </nav>
-        <div class="menu-foot">Plan. Hide. Steal. Escape. &nbsp;&middot;&nbsp; v0.2 prototype</div>
+        <div class="chip" id="hud-loot-box">
+          <i class="ic" data-icon="chest"></i><span id="hud-loot">0/3</span>
+        </div>
+        <div class="chip alert-0" id="hud-alert-box">
+          <i class="ic" data-icon="alert"></i><span id="hud-alert">LOW</span>
+        </div>
       </div>
-      <div class="menu-right">
-        <div class="menu-stage">
-          <canvas id="menu-thief" class="fig thief"></canvas>
-          <canvas id="menu-guard" class="fig guard"></canvas>
-          <div class="floor-glow"></div>
+      <!-- centre: timer + stamina -->
+      <div class="hud-col center">
+        <div class="timer" id="hud-time-box">
+          <i class="ic" data-icon="clock"></i><span id="hud-time">04:00</span>
+        </div>
+        <div class="stamina" id="hud-stamina-box">
+          <i class="ic" data-icon="bolt"></i>
+          <div class="bar"><div class="fill" id="hud-stamina-fill"></div></div>
+        </div>
+      </div>
+      <!-- right column: whistle / noise / buttons -->
+      <div class="hud-col right">
+        <div class="chip ready" id="hud-whistle-box" title="Whistle [Q]">
+          <i class="ic" data-icon="whistle"></i
+          ><span id="hud-whistle-text">READY</span>
+        </div>
+        <div class="chip noise" title="How much noise you are making">
+          <i class="ic" data-icon="noise"></i
+          ><span id="hud-noise"><b></b><b></b><b></b><b></b></span>
+        </div>
+        <div class="hud-btns">
+          <button
+            class="icon-btn"
+            id="btn-pause"
+            title="Pause (P)"
+            aria-label="Pause"
+          >
+            <i class="ic" data-icon="pause"></i>
+          </button>
+          <button
+            class="icon-btn"
+            id="btn-restart"
+            title="Restart (R)"
+            aria-label="Restart"
+          >
+            <i class="ic" data-icon="refresh"></i>
+          </button>
+          <button
+            class="icon-btn"
+            id="btn-gear"
+            title="Settings"
+            aria-label="Settings"
+          >
+            <i class="ic" data-icon="gear"></i>
+          </button>
         </div>
       </div>
     </div>
-  </section>
 
-  <!-- ROLE SELECT -->
-  <section id="screen-roles" class="screen menu hidden">
-    <div class="menu-bg dim"></div><div class="menu-fog"></div>
-    <div class="screen-inner">
-      <h2 class="screen-title">CHOOSE YOUR ROLE</h2>
-      <div class="role-cards">
-        <article class="role-card" id="card-thief">
-          <canvas id="portrait-thief" class="portrait"></canvas>
-          <h3>THIEF</h3>
-          <p>Slip in, steal all 3 treasures and reach the exit. Hide, sneak and distract.</p>
-          <button class="btn primary" id="btn-start"><i class="ic" data-icon="play"></i> PLAY AS THIEF</button>
-        </article>
-        <article class="role-card locked" id="card-guard">
-          <canvas id="portrait-guard" class="portrait"></canvas>
-          <h3>GUARD</h3>
-          <p>Patrol the mansion and hunt the thief with your flashlight.</p>
-          <button class="btn" id="btn-guard" disabled><i class="ic" data-icon="lock"></i> COMING SOON</button>
-          <div class="lock-badge"><i class="ic" data-icon="lock"></i></div>
-        </article>
+    <div id="prompt" class="hidden"></div>
+    <div id="toast" class="hidden"></div>
+
+    <!-- ===================== Touch controls (touch devices only) ===================== -->
+    <div id="touch-ui" class="hidden">
+      <div id="joy"><div id="joy-stick"></div></div>
+      <div id="touch-buttons">
+        <!-- contextual button: only visible next to a hiding spot / loot; icon + label change -->
+        <button
+          id="t-act"
+          class="tbtn act hidden"
+          data-kind="hide"
+          aria-label="Action"
+        >
+          <i class="ic k-loot" data-icon="hand"></i
+          ><i class="ic k-hide" data-icon="hide"></i
+          ><i class="ic k-leave" data-icon="exit"></i>
+          <span class="tl" id="t-act-label">HIDE</span>
+        </button>
+        <div class="trow">
+          <button id="t-whistle" class="tbtn" aria-label="Whistle">
+            <i class="ic" data-icon="whistle"></i
+            ><span class="tl">WHISTLE</span>
+          </button>
+          <button id="t-run" class="tbtn" aria-label="Run (hold)">
+            <i class="ic" data-icon="run"></i><span class="tl">RUN</span>
+          </button>
+        </div>
       </div>
-      <button class="btn back" id="btn-roles-back"><i class="ic" data-icon="back"></i> BACK</button>
     </div>
-  </section>
 
-  <!-- HOW TO PLAY -->
-  <section id="screen-howto" class="screen menu hidden">
-    <div class="menu-bg dim"></div><div class="menu-fog"></div>
-    <div class="screen-inner narrow">
-      <h2 class="screen-title">HOW TO PLAY</h2>
-      <div class="panel">
-        <div class="controls">
-          <div class="grid">
-            <div><kbd>W A S D</kbd> / <kbd>&#8592;&#8593;&#8594;&#8595;</kbd></div><div>Move</div>
-            <div><kbd>SHIFT</kbd></div><div>Run (fast, loud, drains stamina)</div>
-            <div><kbd>E</kbd> / <kbd>SPACE</kbd></div><div>Take loot &middot; Hide / leave hiding spot</div>
-            <div><kbd>Q</kbd></div><div>Whistle &mdash; lure guards to a spot (8s cooldown)</div>
-            <div><kbd>P</kbd> / <kbd>ESC</kbd></div><div>Pause</div>
-            <div><kbd>M</kbd> &nbsp; <kbd>R</kbd></div><div>Sound on/off &nbsp;&middot;&nbsp; Restart</div>
+    <!-- ===================== Screens ===================== -->
+    <div id="loading"><div id="loading-text">LOADING THE MANSION...</div></div>
+
+    <!-- MAIN MENU -->
+    <section id="screen-menu" class="screen menu">
+      <div class="menu-bg" id="menu-bg"></div>
+      <div class="menu-beam b1"></div>
+      <div class="menu-beam b2"></div>
+      <div class="menu-fog"></div>
+      <div class="dust" id="dust"></div>
+      <div class="moon"></div>
+
+      <div class="menu-layout">
+        <div class="menu-left">
+          <div class="logo">
+            <div class="logo-top">HIDE IN</div>
+            <div class="logo-main">THE DARK</div>
+            <div class="logo-sub">STEALTH &bull; HEIST &bull; ESCAPE</div>
           </div>
-          <p class="touch-note">On phones: use the joystick and the RUN / WHISTLE buttons. A HIDE or TAKE button appears when you stand next to something.</p>
+          <nav class="menu-list">
+            <button class="mbtn primary" id="btn-play">
+              <i class="ic" data-icon="play"></i><span>PLAY</span>
+            </button>
+            <button class="mbtn" id="btn-settings">
+              <i class="ic" data-icon="gear"></i><span>SETTINGS</span>
+            </button>
+            <button class="mbtn" id="btn-howto">
+              <i class="ic" data-icon="book"></i><span>HOW TO PLAY</span>
+            </button>
+          </nav>
+          <div class="menu-foot">
+            Plan. Hide. Steal. Escape. &nbsp;&middot;&nbsp; v0.2 prototype
+          </div>
         </div>
-        <ul class="tips">
-          <li>Steal <b>all 3</b> treasures, then reach the glowing <b class="green">EXIT</b> (top right) within 4 minutes.</li>
-          <li>Guards only <b>see</b> you inside their flashlight beam. Walls and furniture block it.</li>
-          <li>Glass, metal, creaky boards, slammed doors and running all make <b>noise</b>. Guards go to where they <b>hear</b> it.</li>
-          <li>Hide in cabinets, barrels and under tables. Guards check hiding spots while searching.</li>
-        </ul>
-      </div>
-      <button class="btn back" id="btn-howto-back"><i class="ic" data-icon="back"></i> BACK</button>
-    </div>
-  </section>
-
-  <!-- SETTINGS -->
-  <section id="screen-settings" class="screen menu hidden">
-    <div class="menu-bg dim"></div><div class="menu-fog"></div>
-    <div class="screen-inner narrow">
-      <h2 class="screen-title">SETTINGS</h2>
-      <div class="panel settings">
-        <div class="set-row">
-          <i class="ic" data-icon="sound"></i><div class="set-name">Sound<small>Footsteps, glass, whistle, alerts</small></div>
-          <button class="switch on" id="set-sound" role="switch" aria-checked="true" aria-label="Sound"><span></span></button>
-        </div>
-        <div class="set-row sub"><input type="range" id="set-sfxvol" min="0" max="100" value="80" aria-label="Sound volume"><output id="out-sfxvol">80</output></div>
-        <div class="set-row">
-          <i class="ic" data-icon="music"></i><div class="set-name">Music<small>Dark ambient score</small></div>
-          <button class="switch on" id="set-music" role="switch" aria-checked="true" aria-label="Music"><span></span></button>
-        </div>
-        <div class="set-row sub"><input type="range" id="set-musicvol" min="0" max="100" value="50" aria-label="Music volume"><output id="out-musicvol">50</output></div>
-        <div class="set-row">
-          <i class="ic" data-icon="vibe"></i><div class="set-name">Vibration<small>Phones that support it</small></div>
-          <button class="switch on" id="set-vibration" role="switch" aria-checked="true" aria-label="Vibration"><span></span></button>
+        <div class="menu-right">
+          <div class="menu-stage">
+            <canvas id="menu-thief" class="fig thief"></canvas>
+            <canvas id="menu-guard" class="fig guard"></canvas>
+            <div class="floor-glow"></div>
+          </div>
         </div>
       </div>
-      <button class="btn back" id="btn-settings-back"><i class="ic" data-icon="back"></i> BACK</button>
-    </div>
-  </section>
+    </section>
 
-  <!-- PAUSE -->
-  <section id="screen-pause" class="screen hidden">
-    <div class="panel small-panel">
-      <h2 class="big-h">PAUSED</h2>
-      <button class="btn primary" id="btn-resume"><i class="ic" data-icon="play"></i> RESUME</button>
-      <button class="btn" id="btn-settings-pause"><i class="ic" data-icon="gear"></i> SETTINGS</button>
-      <button class="btn" id="btn-restart-pause"><i class="ic" data-icon="refresh"></i> RESTART</button>
-      <button class="btn" id="btn-menu-pause"><i class="ic" data-icon="home"></i> MAIN MENU</button>
-    </div>
-  </section>
+    <!-- ROLE SELECT -->
+    <section id="screen-roles" class="screen menu hidden">
+      <div class="menu-bg dim"></div>
+      <div class="menu-fog"></div>
+      <div class="screen-inner">
+        <h2 class="screen-title">CHOOSE YOUR ROLE</h2>
+        <div class="role-cards">
+          <article class="role-card" id="card-thief">
+            <canvas id="portrait-thief" class="portrait"></canvas>
+            <h3>THIEF</h3>
+            <p>
+              Slip in, steal all 3 treasures and reach the exit. Hide, sneak and
+              distract.
+            </p>
+            <button class="btn primary" id="btn-start">
+              <i class="ic" data-icon="play"></i> PLAY AS THIEF
+            </button>
+          </article>
+          <article class="role-card locked" id="card-guard">
+            <canvas id="portrait-guard" class="portrait"></canvas>
+            <h3>GUARD</h3>
+            <p>Patrol the mansion and hunt the thief with your flashlight.</p>
+            <button class="btn" id="btn-guard" disabled>
+              <i class="ic" data-icon="lock"></i> COMING SOON
+            </button>
+            <div class="lock-badge"><i class="ic" data-icon="lock"></i></div>
+          </article>
+        </div>
+        <button class="btn back" id="btn-roles-back">
+          <i class="ic" data-icon="back"></i> BACK
+        </button>
+      </div>
+    </section>
 
-  <!-- GAME OVER -->
-  <section id="screen-over" class="screen hidden">
-    <div class="panel small-panel danger">
-      <h2 class="big-h red" id="over-title">CAUGHT</h2>
-      <p id="over-text">A guard caught you in the dark.</p>
-      <p class="stats" id="over-stats"></p>
-      <button class="btn primary" id="btn-retry-over"><i class="ic" data-icon="refresh"></i> TRY AGAIN</button>
-      <button class="btn" id="btn-menu-over"><i class="ic" data-icon="home"></i> MAIN MENU</button>
-    </div>
-  </section>
+    <!-- HOW TO PLAY -->
+    <section id="screen-howto" class="screen menu hidden">
+      <div class="menu-bg dim"></div>
+      <div class="menu-fog"></div>
+      <div class="screen-inner narrow">
+        <h2 class="screen-title">HOW TO PLAY</h2>
+        <div class="panel">
+          <div class="controls">
+            <div class="grid">
+              <div>
+                <kbd>W A S D</kbd> / <kbd>&#8592;&#8593;&#8594;&#8595;</kbd>
+              </div>
+              <div>Move</div>
+              <div><kbd>SHIFT</kbd></div>
+              <div>Run (fast, loud, drains stamina)</div>
+              <div><kbd>E</kbd> / <kbd>SPACE</kbd></div>
+              <div>Take loot &middot; Hide / leave hiding spot</div>
+              <div><kbd>Q</kbd></div>
+              <div>Whistle &mdash; lure guards to a spot (8s cooldown)</div>
+              <div><kbd>P</kbd> / <kbd>ESC</kbd></div>
+              <div>Pause</div>
+              <div><kbd>M</kbd> &nbsp; <kbd>R</kbd></div>
+              <div>Sound on/off &nbsp;&middot;&nbsp; Restart</div>
+            </div>
+            <p class="touch-note">
+              On phones: use the joystick and the RUN / WHISTLE buttons. A HIDE
+              or TAKE button appears when you stand next to something.
+            </p>
+          </div>
+          <ul class="tips">
+            <li>
+              Steal <b>all 3</b> treasures, then reach the glowing
+              <b class="green">EXIT</b> (top right) within 4 minutes.
+            </li>
+            <li>
+              Guards only <b>see</b> you inside their flashlight beam. Walls and
+              furniture block it.
+            </li>
+            <li>
+              Glass, metal, creaky boards, slammed doors and running all make
+              <b>noise</b>. Guards go to where they <b>hear</b> it.
+            </li>
+            <li>
+              Hide in cabinets, barrels and under tables. Guards check hiding
+              spots while searching.
+            </li>
+          </ul>
+        </div>
+        <button class="btn back" id="btn-howto-back">
+          <i class="ic" data-icon="back"></i> BACK
+        </button>
+      </div>
+    </section>
 
-  <section id="screen-win" class="screen hidden">
-    <div class="panel small-panel win">
-      <h2 class="big-h green">ESCAPED!</h2>
-      <p>You vanished into the night with all the loot. The guards never saw a thing.</p>
-      <p class="stats" id="win-stats"></p>
-      <button class="btn primary" id="btn-retry-win"><i class="ic" data-icon="refresh"></i> PLAY AGAIN</button>
-      <button class="btn" id="btn-menu-win"><i class="ic" data-icon="home"></i> MAIN MENU</button>
-    </div>
-  </section>
+    <!-- SETTINGS -->
+    <section id="screen-settings" class="screen menu hidden">
+      <div class="menu-bg dim"></div>
+      <div class="menu-fog"></div>
+      <div class="screen-inner narrow">
+        <h2 class="screen-title">SETTINGS</h2>
+        <div class="panel settings">
+          <div class="set-row">
+            <i class="ic" data-icon="sound"></i>
+            <div class="set-name">
+              Sound<small>Footsteps, glass, whistle, alerts</small>
+            </div>
+            <button
+              class="switch on"
+              id="set-sound"
+              role="switch"
+              aria-checked="true"
+              aria-label="Sound"
+            >
+              <span></span>
+            </button>
+          </div>
+          <div class="set-row sub">
+            <input
+              type="range"
+              id="set-sfxvol"
+              min="0"
+              max="100"
+              value="80"
+              aria-label="Sound volume"
+            /><output id="out-sfxvol">80</output>
+          </div>
+          <div class="set-row">
+            <i class="ic" data-icon="music"></i>
+            <div class="set-name">Music<small>Dark ambient score</small></div>
+            <button
+              class="switch on"
+              id="set-music"
+              role="switch"
+              aria-checked="true"
+              aria-label="Music"
+            >
+              <span></span>
+            </button>
+          </div>
+          <div class="set-row sub">
+            <input
+              type="range"
+              id="set-musicvol"
+              min="0"
+              max="100"
+              value="50"
+              aria-label="Music volume"
+            /><output id="out-musicvol">50</output>
+          </div>
+          <div class="set-row">
+            <i class="ic" data-icon="vibe"></i>
+            <div class="set-name">
+              Vibration<small>Phones that support it</small>
+            </div>
+            <button
+              class="switch on"
+              id="set-vibration"
+              role="switch"
+              aria-checked="true"
+              aria-label="Vibration"
+            >
+              <span></span>
+            </button>
+          </div>
+        </div>
+        <button class="btn back" id="btn-settings-back">
+          <i class="ic" data-icon="back"></i> BACK
+        </button>
+      </div>
+    </section>
 
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
-  <script src="mapdata.js"></script>  
-  <script src="assets.js"></script>  
-  <script src="logic.js"></script>    
-  <script src="audio.js"></script> 
-  <script src="game.js"></script>  
-</body>
+    <!-- PAUSE -->
+    <section id="screen-pause" class="screen hidden">
+      <div class="panel small-panel">
+        <h2 class="big-h">PAUSED</h2>
+        <button class="btn primary" id="btn-resume">
+          <i class="ic" data-icon="play"></i> RESUME
+        </button>
+        <button class="btn" id="btn-settings-pause">
+          <i class="ic" data-icon="gear"></i> SETTINGS
+        </button>
+        <button class="btn" id="btn-restart-pause">
+          <i class="ic" data-icon="refresh"></i> RESTART
+        </button>
+        <button class="btn" id="btn-menu-pause">
+          <i class="ic" data-icon="home"></i> MAIN MENU
+        </button>
+      </div>
+    </section>
+
+    <!-- GAME OVER -->
+    <section id="screen-over" class="screen hidden">
+      <div class="panel small-panel danger">
+        <h2 class="big-h red" id="over-title">CAUGHT</h2>
+        <p id="over-text">A guard caught you in the dark.</p>
+        <p class="stats" id="over-stats"></p>
+        <button class="btn primary" id="btn-retry-over">
+          <i class="ic" data-icon="refresh"></i> TRY AGAIN
+        </button>
+        <button class="btn" id="btn-menu-over">
+          <i class="ic" data-icon="home"></i> MAIN MENU
+        </button>
+      </div>
+    </section>
+
+    <section id="screen-win" class="screen hidden">
+      <div class="panel small-panel win">
+        <h2 class="big-h green">ESCAPED!</h2>
+        <p>
+          You vanished into the night with all the loot. The guards never saw a
+          thing.
+        </p>
+        <p class="stats" id="win-stats"></p>
+        <button class="btn primary" id="btn-retry-win">
+          <i class="ic" data-icon="refresh"></i> PLAY AGAIN
+        </button>
+        <button class="btn" id="btn-menu-win">
+          <i class="ic" data-icon="home"></i> MAIN MENU
+        </button>
+      </div>
+    </section>
+
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+    <script src="mapdata.js"></script>
+    <script src="assets.js"></script>
+    <script src="logic.js"></script>
+    <script src="audio.js"></script>
+    <script src="game.js"></script>
+  </body>
 </html>
