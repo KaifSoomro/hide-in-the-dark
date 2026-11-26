@@ -203,6 +203,17 @@
       if (!this._ok('exitOpen', 1)) return;
       [392, 523, 659].forEach((f, i) => this.tone({ f, dur: 0.5, type: 'sine', gain: 0.12, delay: i * 0.15 }));
     }
+    doorUnlock() {
+      if (!this._ok('unlock', 0.2)) return;
+      this.tone({ f: 520, f2: 780, dur: 0.08, type: 'triangle', gain: 0.14 });
+      this.tone({ f: 880, f2: 1180, dur: 0.12, type: 'triangle', gain: 0.14, delay: 0.08 });
+      this.noise({ dur: 0.16, freq: 320, freq2: 120, q: 1.2, type: 'lowpass', gain: 0.22, delay: 0.14 });
+    }
+    cameraAlert() {
+      if (!this._ok('camAlert', 0.4)) return;
+      this.tone({ f: 1120, dur: 0.09, type: 'square', gain: 0.12 });
+      this.tone({ f: 1480, dur: 0.14, type: 'square', gain: 0.12, delay: 0.11 });
+    }
     click() { if (this._ok('click', 0.05)) this.tone({ f: 600, f2: 420, dur: 0.06, type: 'square', gain: 0.05 }); }
 
     /* ---- ambience: low drone + occasional creaks / wind ---- */

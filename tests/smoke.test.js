@@ -63,7 +63,7 @@ function el(id) {
       classList: {
         add: (c) => cl.add(c),
         remove: (c) => cl.delete(c),
-        contains: (c) => cl.has(c),
+        contains: (c) => cl.has(c) || (els[id]._className || "").split(/\s+/).includes(c),
         toggle: (c, on) => {
           if (on === undefined) on = !cl.has(c);
           on ? cl.add(c) : cl.delete(c);
@@ -71,6 +71,10 @@ function el(id) {
         },
       },
       children: [1, 2, 3, 4].map(() => ({ classList: { toggle() {} } })),
+      appendChild(child) {
+        if (child && child.id) els[child.id] = child;
+      },
+      querySelector() { return null; },
       addEventListener(ev, fn) {
         (handlers[id + ":" + ev] = handlers[id + ":" + ev] || []).push(fn);
       },
@@ -87,16 +91,50 @@ function el(id) {
     };
     els[id].classList.add("hidden0");
     cl.delete("hidden0");
+    Object.defineProperty(els[id], "className", {
+      get() { return this._className || ""; },
+      set(v) {
+        this._className = String(v);
+        cl.clear();
+        this._className.split(/\s+/).filter(Boolean).forEach((c) => cl.add(c));
+      },
+    });
   }
   return els[id];
 }
-global.document = { getElementById: el, addEventListener() {}, hidden: false };
+global.document = {
+  getElementById: el,
+  addEventListener() {},
+  hidden: false,
+  createElement(tag) {
+    const node = el("_dyn_" + Math.random().toString(36).slice(2));
+    const origAdd = node.addEventListener.bind(node);
+    Object.defineProperty(node, "id", {
+      get() { return this._id; },
+      set(v) {
+        this._id = v;
+        els[v] = this;
+      },
+    });
+    node.addEventListener = (ev, fn) => {
+      if (node._id) (handlers[node._id + ":" + ev] = handlers[node._id + ":" + ev] || []).push(fn);
+      else origAdd(ev, fn);
+    };
+    return node;
+  },
+};
 const winHandlers = {};
 global.addEventListener = (ev, fn) => {
   winHandlers[ev] = fn;
 };
 global.innerWidth = 1280;
 global.innerHeight = 720;
+const lsStore = {};
+global.localStorage = {
+  getItem: (k) => (k in lsStore ? lsStore[k] : null),
+  setItem: (k, v) => { lsStore[k] = String(v); },
+  removeItem: (k) => { delete lsStore[k]; },
+};
 global.matchMedia = () => ({ matches: false });
 global.AudioContext = undefined; // audio disabled in node: SFX must degrade gracefully
 global.Image = class {
@@ -120,6 +158,8 @@ class Scene {
     };
     this.textures = {
       addImage() {},
+      exists: () => false,
+      remove() {},
       get: () => stub(),
       createCanvas: () => stub({ getContext: () => ctx2d() }),
     };
@@ -204,6 +244,7 @@ global.Phaser = {
 global.__scenes = {};
 
 require("../mapdata.js");
+require("../level2data.js");
 require("../assets.js");
 window.StealthLogic = require("../logic.js");
 require("../audio.js");
@@ -273,8 +314,10 @@ function run() {
   click("btn-howto-back");
   click("btn-play");
   click("btn-start");
+  ok(!el("screen-levels").classList.contains("hidden"), "Play as Thief opens Level Selection");
+  click("level-card-1");
   frame(5);
-  ok(g.state === "PLAYING", "Play as Thief begins the match");
+  ok(g.state === "PLAYING", "Selecting Level 1 begins the match");
   ok(el("screen-menu").classList.contains("hidden"), "menu hidden after start");
   ok(!el("hud").classList.contains("hidden"), "HUD visible");
 
@@ -561,6 +604,7 @@ function run() {
   // long soak: random inputs, no exceptions
   click("btn-play");
   click("btn-start");
+  click("level-card-1");
   frame(2);
   let seed = 7;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -584,6 +628,54 @@ function run() {
       (threw ? " -> " + threw.stack : "") +
       ` (ended ${g.state})`,
   );
+
+  // Level 2 unlocking, persistence, keys, locked doors, and escape
+  ok(!el("level-card-2").classList.contains("locked"), "Level 2 unlocked after winning Level 1");
+  ok(JSON.parse(lsStore.hitd_progress).unlockedLevel >= 2, "Progress saved to localStorage");
+  if (g.state !== "MENU") { g.toMenu(); frame(2); }
+  click("btn-play");
+  click("btn-start");
+  ok(el("level-card-3").classList.contains("locked"), "Level 3 still locked before beating Level 2");
+  click("level-card-3");
+  ok(g.state === "MENU", "clicking locked Level 3 does not start game");
+  click("level-card-2");
+  frame(4);
+  ok(g.state === "PLAYING" && g.currentLevel === 2, "Level 2 starts when unlocked");
+  ok(!el("hud-keys-box").classList.contains("hidden"), "HUD keys counter visible in Level 2");
+
+  // Collect all 3 keys
+  for (const k of g.keyObjs) {
+    g.thief.x = k.def.ax; g.thief.y = k.def.ay;
+    frame(2); press("e"); frame(2);
+  }
+  ok(g.keysCollected === 3, "collected all 3 keys in Level 2");
+
+  // Unlock all 3 locked doors
+  for (const ld of g.lockedDoors) {
+    g.thief.x = ld.cx; g.thief.y = ld.cy + 28;
+    frame(2); press("e"); frame(2);
+  }
+  ok(g.lockedDoors.every((d) => d.unlocked), "unlocked all 3 prison doors");
+
+  // Try exiting before collecting all 3 treasures -> blocked
+  const ex2 = g.levelData.exit;
+  g.guards.forEach((gd) => { gd.logic.reset(); gd.logic.x = 180; gd.logic.y = 1340; });
+  g.thief.x = (ex2.x0 + ex2.x1) / 2; g.thief.y = (ex2.y0 + ex2.y1) / 2;
+  frame(3);
+  ok(g.state === "PLAYING" && !g.exitOpen, "Level 2 exit blocked without all 3 treasures");
+
+  // Collect all 3 treasures and escape
+  for (const o of g.lootObjs) {
+    g.thief.x = o.def.ax; g.thief.y = o.def.ay;
+    frame(2); press("e"); frame(2);
+  }
+  ok(g.lootCount === 3 && g.exitOpen, "Level 2 exit opens after 3 keys + 3 treasures");
+  g.guards.forEach((gd) => { gd.logic.reset(); gd.logic.x = 180; gd.logic.y = 1340; });
+  g.thief.x = (ex2.x0 + ex2.x1) / 2; g.thief.y = (ex2.y0 + ex2.y1) / 2;
+  frame(3);
+  ok(g.state === "OVER" && !el("screen-win").classList.contains("hidden"), "Level 2 victory screen shown");
+  ok(!el("level-card-3").classList.contains("locked"), "Level 3 unlocked after completing Level 2");
+  ok(JSON.parse(lsStore.hitd_progress).unlockedLevel === 3, "Level 3 unlock persisted in localStorage");
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASSED");
   process.exit(fails ? 1 : 0);

@@ -80,6 +80,27 @@
             }
         }
       }
+      // 3. locked doors start closed (blocking walk & sight)
+      if (data.lockedDoors) {
+        for (const ld of data.lockedDoors) {
+          this.setRectBlocked(ld.x0, ld.y0, ld.x1, ld.y1, true, true);
+        }
+      }
+    }
+
+    /** Block or unblock a rectangular region (used by interactive locked doors). */
+    setRectBlocked(bx0, by0, bx1, by1, blocked, blocksSight = true) {
+      const { cols, rows } = this;
+      const x0 = Math.max(0, Math.floor(bx0 / CELL)),
+        x1 = Math.min(cols - 1, Math.floor(bx1 / CELL));
+      const y0 = Math.max(0, Math.floor(by0 / CELL)),
+        y1 = Math.min(rows - 1, Math.floor(by1 / CELL));
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          this.walk[y * cols + x] = blocked ? 0 : 1;
+          this.solid[y * cols + x] = blocked && blocksSight ? 1 : 0;
+        }
+      }
     }
 
     isWalkable(x, y) {
@@ -218,6 +239,30 @@
       this.gen = 0;
       this.heap = []; // reused binary heap of [f, idx]
       this._scratch = [];
+    }
+
+    /** Recompute nav walkability around a rectangle (e.g. after unlocking a door). */
+    rebuildArea(bx0, by0, bx1, by1) {
+      const pad = 16;
+      const i0 = Math.max(0, Math.floor((bx0 - pad) / NAV));
+      const i1 = Math.min(this.cols - 1, Math.floor((bx1 + pad) / NAV));
+      const j0 = Math.max(0, Math.floor((by0 - pad) / NAV));
+      const j1 = Math.min(this.rows - 1, Math.floor((by1 + pad) / NAV));
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) {
+          const cx = i * NAV + NAV / 2,
+            cy = j * NAV + NAV / 2;
+          let good = true;
+          for (let oy = -8; oy <= 8 && good; oy += 8)
+            for (let ox = -8; ox <= 8; ox += 8) {
+              if (!this.world.isWalkable(cx + ox, cy + oy)) {
+                good = false;
+                break;
+              }
+            }
+          this.ok[j * this.cols + i] = good ? 1 : 0;
+        }
+      }
     }
 
     cellOf(x, y) {
@@ -959,6 +1004,88 @@
     }
   }
 
+  /* --------------------------------------------------------------------------
+   * Security Camera
+   * ------------------------------------------------------------------------ */
+  class SecurityCamera {
+    constructor(def, world) {
+      this.id = def.id;
+      this.x = def.x;
+      this.y = def.y;
+      this.angleMin = def.angleMin;
+      this.angleMax = def.angleMax;
+      this.speed = def.speed || 0.7;
+      this.range = def.range || 210;
+      this.half = def.half || 0.38;
+      this.world = world;
+      this.fanX = new Float32Array(33);
+      this.fanY = new Float32Array(33);
+      this.fanN = 0;
+      this.reset();
+    }
+
+    reset() {
+      this.angle = (this.angleMin + this.angleMax) / 2;
+      this.dir = 1;
+      this.pauseTimer = 0;
+      this.alertCd = 0;
+      this.canSee = false;
+      this.refreshFan();
+    }
+
+    refreshFan() {
+      this.fanN = this.world.castFan(
+        this.x,
+        this.y,
+        this.angle,
+        this.half,
+        this.range,
+        32,
+        this.fanX,
+        this.fanY,
+      );
+    }
+
+    update(dt, thief) {
+      if (this.alertCd > 0) this.alertCd = Math.max(0, this.alertCd - dt);
+      if (this.pauseTimer > 0) {
+        this.pauseTimer -= dt;
+      } else {
+        this.angle += this.dir * this.speed * dt;
+        if (this.angle >= this.angleMax) {
+          this.angle = this.angleMax;
+          this.dir = -1;
+          this.pauseTimer = 0.7;
+        } else if (this.angle <= this.angleMin) {
+          this.angle = this.angleMin;
+          this.dir = 1;
+          this.pauseTimer = 0.7;
+        }
+      }
+
+      let seen = false;
+      if (thief && !thief.hidden) {
+        const dx = thief.x - this.x,
+          dy = thief.y - this.y;
+        const d = Math.hypot(dx, dy);
+        if (
+          d <= this.range &&
+          Math.abs(angleDiff(this.angle, Math.atan2(dy, dx))) <= this.half &&
+          this.world.hasLOS(this.x, this.y, thief.x, thief.y)
+        ) {
+          seen = true;
+        }
+      }
+      this.canSee = seen;
+      this.refreshFan();
+      if (seen && this.alertCd <= 0) {
+        this.alertCd = 4.0;
+        return true;
+      }
+      return false;
+    }
+  }
+
   const API = {
     CELL,
     NAV,
@@ -967,6 +1094,7 @@
     SoundSystem,
     SOUND_TYPES,
     Guard,
+    SecurityCamera,
     GUARD_STATES: S,
     dist,
     angleDiff,

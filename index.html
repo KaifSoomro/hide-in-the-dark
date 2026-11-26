@@ -93,10 +93,13 @@
       <!-- left column: role / loot / alert -->
       <div class="hud-col left">
         <div class="chip role">
-          <i class="ic" data-icon="mask"></i><span>THIEF</span>
+          <i class="ic" data-icon="mask"></i><span id="hud-role-label">THIEF</span>
         </div>
         <div class="chip" id="hud-loot-box">
           <i class="ic" data-icon="chest"></i><span id="hud-loot">0/3</span>
+        </div>
+        <div class="chip hidden" id="hud-keys-box">
+          <i class="ic" data-icon="key"></i><span id="hud-keys">0/3</span>
         </div>
         <div class="chip alert-0" id="hud-alert-box">
           <i class="ic" data-icon="alert"></i><span id="hud-alert">LOW</span>
@@ -141,6 +144,14 @@
           </button>
           <button
             class="icon-btn"
+            id="btn-fullscreen"
+            title="Fullscreen (F)"
+            aria-label="Fullscreen"
+          >
+            <i class="ic" data-icon="fullscreen"></i>
+          </button>
+          <button
+            class="icon-btn"
             id="btn-gear"
             title="Settings"
             aria-label="Settings"
@@ -150,6 +161,15 @@
         </div>
       </div>
     </div>
+
+    <button
+      class="icon-btn fs-global"
+      id="btn-fullscreen-menu"
+      title="Toggle Fullscreen (F)"
+      aria-label="Toggle Fullscreen"
+    >
+      <i class="ic" data-icon="fullscreen"></i>
+    </button>
 
     <div id="prompt" class="hidden"></div>
     <div id="toast" class="hidden"></div>
@@ -255,6 +275,23 @@
           </article>
         </div>
         <button class="btn back" id="btn-roles-back">
+          <i class="ic" data-icon="back"></i> BACK
+        </button>
+      </div>
+    </section>
+
+    <!-- LEVEL SELECT -->
+    <section id="screen-levels" class="screen menu hidden">
+      <div class="menu-bg dim"></div>
+      <div class="menu-fog"></div>
+      <div class="screen-inner wide">
+        <h2 class="screen-title">SELECT LEVEL</h2>
+        <div class="level-role-pill">
+          <i class="ic" data-icon="mask"></i>
+          <span>ROLE: <b id="level-role-name">THIEF</b></span>
+        </div>
+        <div class="level-grid" id="level-cards"></div>
+        <button class="btn back" id="btn-levels-back">
           <i class="ic" data-icon="back"></i> BACK
         </button>
       </div>
@@ -428,13 +465,19 @@
     <section id="screen-win" class="screen hidden">
       <div class="panel small-panel win">
         <h2 class="big-h green">ESCAPED!</h2>
-        <p>
+        <p id="win-text">
           You vanished into the night with all the loot. The guards never saw a
           thing.
         </p>
         <p class="stats" id="win-stats"></p>
+        <button class="btn primary hidden" id="btn-next-win">
+          <i class="ic" data-icon="play"></i> NEXT LEVEL
+        </button>
         <button class="btn primary" id="btn-retry-win">
           <i class="ic" data-icon="refresh"></i> PLAY AGAIN
+        </button>
+        <button class="btn" id="btn-levels-win">
+          <i class="ic" data-icon="grid"></i> LEVEL SELECT
         </button>
         <button class="btn" id="btn-menu-win">
           <i class="ic" data-icon="home"></i> MAIN MENU
@@ -444,6 +487,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
     <script src="mapdata.js"></script>
+    <script src="level2data.js"></script>
     <script src="assets.js"></script>
     <script src="logic.js"></script>
     <script src="audio.js"></script>

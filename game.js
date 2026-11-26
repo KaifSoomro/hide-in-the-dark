@@ -16,8 +16,7 @@
 (function () {
   'use strict';
 
-  const { World, NavMesh, SoundSystem, Guard, GUARD_STATES: GS, dist } = window.StealthLogic;
-  const D = window.MAPDATA;
+  const { World, NavMesh, SoundSystem, Guard, SecurityCamera, GUARD_STATES: GS, dist } = window.StealthLogic;
   const sfx = new window.SFX();
 
   /* ------------------------------- tuning ---------------------------------- */
@@ -30,14 +29,48 @@
     SPRITE_SCALE: 0.5,
     AMBIENT: 0.84,              // darkness opacity outside light
     LOOT_RANGE: 72,
+    DOOR_RANGE: 58,
   };
 
-  // soft light sources painted into the darkness (candles, lanterns, torches) -> [x, y, radius, strength]
+  // soft light sources painted into the darkness for Level 1 (candles, lanterns, torches) -> [x, y, radius, strength]
   const STATIC_LIGHTS = [
     [473, 305, 66, 0.55], [645, 305, 66, 0.55], [495, 105, 56, 0.5], [625, 105, 56, 0.5],
     [263, 458, 46, 0.5], [57, 332, 46, 0.45], [905, 212, 52, 0.5], [660, 212, 46, 0.4],
     [808, 738, 70, 0.55], [452, 1090, 66, 0.4], [668, 1090, 66, 0.4], [30, 640, 44, 0.4],
   ];
+
+  const LEVELS_META = [
+    { id: 1, name: 'Abandoned Mansion', diff: 'Normal', diffClass: '', playable: true, desc: '3 Treasures • 2 Guards' },
+    { id: 2, name: 'Underground Prison', diff: 'Hard', diffClass: 'hard', playable: true, desc: '3 Keys • 3 Loot • Cameras' },
+    { id: 3, name: 'Haunted Hospital', diff: 'Very Hard', diffClass: 'hard', playable: false, desc: 'Coming Soon' },
+    { id: 4, name: 'Secret Laboratory', diff: 'Expert', diffClass: 'extreme', playable: false, desc: 'Coming Soon' },
+    { id: 5, name: 'The Dark Forest', diff: 'Nightmare', diffClass: 'extreme', playable: false, desc: 'Coming Soon' },
+    { id: 6, name: 'Abandoned Subway', diff: 'Extreme', diffClass: 'extreme', playable: false, desc: 'Coming Soon' },
+    { id: 7, name: 'Final Nightmare', diff: 'Insane', diffClass: 'extreme', playable: false, desc: 'Coming Soon' },
+  ];
+
+  const Progress = {
+    unlockedLevel: 1,
+    completed: [],
+    load() {
+      try {
+        const o = JSON.parse(localStorage.getItem('hitd_progress') || '{}');
+        if (typeof o.unlockedLevel === 'number' && o.unlockedLevel >= 1) this.unlockedLevel = Math.min(7, o.unlockedLevel);
+        if (Array.isArray(o.completed)) this.completed = o.completed.filter((n) => typeof n === 'number');
+      } catch (e) { /* storage unavailable */ }
+    },
+    save() {
+      try { localStorage.setItem('hitd_progress', JSON.stringify({ unlockedLevel: this.unlockedLevel, completed: this.completed })); } catch (e) { /* ignore */ }
+    },
+    isUnlocked(id) { return id <= this.unlockedLevel; },
+    isCompleted(id) { return this.completed.includes(id); },
+    completeLevel(id) {
+      if (!this.completed.includes(id)) this.completed.push(id);
+      if (id >= this.unlockedLevel && id < 7) this.unlockedLevel = id + 1;
+      this.save();
+    },
+  };
+  Progress.load();
 
   const SOUND_COLORS = { walk: 0x9fb4d8, run: 0x9fb4d8, wood: 0xc49a6c, door: 0xe0a050, loot: 0xffd45a, whistle: 0xffffff, metal: 0xc8d0dc, glass: 0x66e0ff, slam: 0xff7a45 };
 
@@ -70,6 +103,11 @@
     refresh: '<svg viewBox="0 0 24 24"><path d="M20 11.5A8 8 0 1 0 17.6 17M20 4v7.5h-7.5"/></svg>',
     book: '<svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5zM4 5.5v16M8.5 7.5H16"/></svg>',
     home: '<svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10"/></svg>',
+    key: '<svg viewBox="0 0 24 24"><circle cx="7.5" cy="14.5" r="4"/><path d="M10.5 11.5 19 3M16 6l2.5 2.5M14 8l2 2"/></svg>',
+    fullscreen: '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+    exitFullscreen: '<svg viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
+    check: '<svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>',
+    grid: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
   };
   const IS_TOUCH = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 
@@ -214,6 +252,175 @@
         c.fillStyle = '#fff7c0'; c.fillRect(4, 0, 1, 9); c.fillRect(0, 4, 9, 1);
         c.fillStyle = '#ffd24a'; c.fillRect(3, 3, 3, 3); c.fillStyle = '#ffffff'; c.fillRect(4, 4, 1, 1);
       });
+      mk('key_item', 16, 16, (c) => px(c, [
+        '................', '.........kkkk...', '........kwwwwk..', '........kw..wk..',
+        '........kwwwwk..', '.......kk..kk...', '......kwwk......', '.....kwwk.......',
+        '....kwwk........', '...kwwk.........', '..kwwk..........', '..kwwkk.........',
+        '..kwwk..........', '...kkk..........', '................', '................',
+      ], { k: '#111620', w: '#ffffff' }));
+
+      if (window.LEVEL2_DATA) this.buildPrisonMapTexture(window.LEVEL2_DATA);
+    }
+
+    /** Procedurally render the detailed Underground Prison map without any HUD/characters/text */
+    buildPrisonMapTexture(L2) {
+      const t = this.textures.createCanvas('prison_map', L2.W, L2.H);
+      const c = t.getContext('2d');
+      // Base dark underground stone
+      c.fillStyle = '#090c12';
+      c.fillRect(0, 0, L2.W, L2.H);
+      for (let y = 0; y < L2.H; y += 24) {
+        for (let x = 0; x < L2.W; x += 24) {
+          c.fillStyle = ((x + y) / 24) % 2 === 0 ? 'rgba(255,255,255,0.015)' : 'rgba(0,0,0,0.12)';
+          c.fillRect(x, y, 24, 24);
+        }
+      }
+
+      // Draw floor regions
+      const zonePal = {
+        cells: { base: '#252b36', tile: '#2c3340', line: '#181d26', size: 28 },
+        corridor: { base: '#2a303b', tile: '#313846', line: '#1a202a', size: 32 },
+        checkpoint: { base: '#272c38', tile: '#2f3544', line: '#171b24', size: 24 },
+        security: { base: '#1e2733', tile: '#24303e', line: '#121821', size: 20 },
+        storage: { base: '#282a30', tile: '#2f323a', line: '#191b20', size: 32 },
+        maintenance: { base: '#21262e', tile: '#282e38', line: '#14181e', size: 24 },
+        vent: { base: '#1a2029', tile: '#232b36', line: '#0e1218', size: 14 },
+        vault: { base: '#242630', tile: '#2c2f3b', line: '#171922', size: 28 },
+        escape: { base: '#1f2326', tile: '#262b2f', line: '#141719', size: 26 },
+      };
+
+      // Base floor fill for all walkable rects
+      for (const f of L2.floors) {
+        c.fillStyle = '#262c38';
+        c.fillRect(f[0], f[1], f[2] - f[0], f[3] - f[1]);
+      }
+
+      // Styled zones
+      for (const z of L2.zones || []) {
+        const p = zonePal[z.style] || zonePal.corridor;
+        c.fillStyle = p.base;
+        c.fillRect(z.x0, z.y0, z.x1 - z.x0, z.y1 - z.y0);
+        const s = p.size;
+        for (let y = z.y0; y < z.y1; y += s) {
+          for (let x = z.x0; x < z.x1; x += s) {
+            if (((Math.floor(x / s) + Math.floor(y / s)) & 1) === 0) {
+              c.fillStyle = p.tile;
+              c.fillRect(x, y, Math.min(s, z.x1 - x), Math.min(s, z.y1 - y));
+            }
+            c.strokeStyle = p.line;
+            c.lineWidth = 1;
+            c.strokeRect(x + 0.5, y + 0.5, Math.min(s, z.x1 - x) - 1, Math.min(s, z.y1 - y) - 1);
+          }
+        }
+        // Zone-specific atmospheric floor details
+        if (z.style === 'checkpoint') {
+          c.strokeStyle = 'rgba(255, 196, 58, 0.25)';
+          c.lineWidth = 3;
+          c.strokeRect(z.x0 + 6, z.y0 + 6, z.x1 - z.x0 - 12, z.y1 - z.y0 - 12);
+        } else if (z.style === 'vault') {
+          c.strokeStyle = 'rgba(255, 212, 90, 0.22)';
+          c.lineWidth = 2;
+          c.strokeRect(z.x0 + 8, z.y0 + 8, z.x1 - z.x0 - 16, z.y1 - z.y0 - 16);
+        } else if (z.style === 'vent') {
+          c.fillStyle = 'rgba(0,0,0,0.35)';
+          for (let vx = z.x0 + 6; vx < z.x1 - 6; vx += 12) c.fillRect(vx, z.y0 + 4, 4, z.y1 - z.y0 - 8);
+        }
+      }
+
+      // Industrial pipes along main corridors
+      c.strokeStyle = '#3d4759';
+      c.lineWidth = 5;
+      c.beginPath();
+      c.moveTo(510, 488); c.lineTo(1310, 488);
+      c.moveTo(510, 932); c.lineTo(1310, 932);
+      c.moveTo(70, 1130); c.lineTo(330, 1130);
+      c.stroke();
+      c.strokeStyle = '#5a6880';
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(510, 486); c.lineTo(1310, 486);
+      c.moveTo(510, 930); c.lineTo(1310, 930);
+      c.stroke();
+
+      // Concrete wall borders around floors
+      c.strokeStyle = '#11151e';
+      c.lineWidth = 10;
+      for (const f of L2.floors) {
+        c.strokeRect(f[0] - 4, f[1] - 4, f[2] - f[0] + 8, f[3] - f[1] + 8);
+      }
+      // Re-fill inner floor edges cleanly so overlapping corridors have no dark seams
+      for (const f of L2.floors) {
+        c.fillStyle = 'rgba(38, 44, 56, 0.18)';
+        c.fillRect(f[0], f[1], f[2] - f[0], f[3] - f[1]);
+      }
+
+      // Corner shadow vignettes inside rooms
+      for (const z of L2.zones || []) {
+        const g = c.createRadialGradient((z.x0 + z.x1) / 2, (z.y0 + z.y1) / 2, 20, (z.x0 + z.x1) / 2, (z.y0 + z.y1) / 2, Math.max(z.x1 - z.x0, z.y1 - z.y0) * 0.75);
+        g.addColorStop(0, 'rgba(0,0,0,0)');
+        g.addColorStop(1, 'rgba(0,0,0,0.42)');
+        c.fillStyle = g;
+        c.fillRect(z.x0, z.y0, z.x1 - z.x0, z.y1 - z.y0);
+      }
+
+      // Metal prison bars
+      for (const b of L2.bars || []) {
+        c.fillStyle = '#0d1017';
+        c.fillRect(b[0] - 3, b[1], 6, b[3] - b[1]);
+        c.fillStyle = '#6c7a91';
+        for (let y = b[1] + 2; y < b[3]; y += 8) {
+          c.fillRect(b[0] - 2, y, 4, 4);
+        }
+      }
+
+      // Obstacles: crates, barrels, desks, pillars
+      for (const blk of L2.blocks) {
+        const [x0, y0, x1, y1, los] = blk;
+        const w = x1 - x0, h = y1 - y0;
+        // Drop shadow
+        c.fillStyle = 'rgba(0,0,0,0.45)';
+        c.fillRect(x0 + 4, y0 + 5, w, h);
+        if (los === 1 && w <= 75 && h <= 75) {
+          // Crate / Pillar
+          c.fillStyle = '#3f3024';
+          c.fillRect(x0, y0, w, h);
+          c.strokeStyle = '#684e38';
+          c.lineWidth = 2;
+          c.strokeRect(x0 + 1, y0 + 1, w - 2, h - 2);
+          c.beginPath();
+          c.moveTo(x0 + 3, y0 + 3); c.lineTo(x1 - 3, y1 - 3);
+          c.moveTo(x1 - 3, y0 + 3); c.lineTo(x0 + 3, y1 - 3);
+          c.stroke();
+        } else if (los === 0 && w <= 85 && h <= 85) {
+          // Metal barrels / bunks
+          c.fillStyle = '#344154';
+          c.fillRect(x0, y0, w, h);
+          c.strokeStyle = '#586b88';
+          c.lineWidth = 2;
+          c.strokeRect(x0 + 1, y0 + 1, w - 2, h - 2);
+        } else {
+          // Security desk / console
+          c.fillStyle = '#222b3a';
+          c.fillRect(x0, y0, w, h);
+          c.strokeStyle = '#475975';
+          c.lineWidth = 2;
+          c.strokeRect(x0 + 1, y0 + 1, w - 2, h - 2);
+          c.fillStyle = '#3dff85';
+          c.fillRect(x0 + 8, y0 + 8, 5, 3);
+          c.fillStyle = '#ff3b4a';
+          c.fillRect(x0 + 18, y0 + 8, 5, 3);
+        }
+      }
+
+      // Escape tunnel exit floor indicator (green chevrons, no text)
+      const ex = L2.exit;
+      c.fillStyle = 'rgba(61, 255, 133, 0.14)';
+      c.fillRect(ex.x0, ex.y0, ex.x1 - ex.x0, ex.y1 - ex.y0);
+      c.strokeStyle = 'rgba(61, 255, 133, 0.5)';
+      c.lineWidth = 2;
+      c.strokeRect(ex.x0 + 2, ex.y0 + 2, ex.x1 - ex.x0 - 4, ex.y1 - ex.y0 - 4);
+
+      t.refresh();
     }
   }
 
@@ -225,21 +432,23 @@
 
     create() {
       this.state = 'MENU';                         // MENU | PLAYING | PAUSED | OVER
-      this.world = new World(D);
-      this.nav = new NavMesh(this.world);
+      this.currentLevel = 1;
+      this.selectedRole = 'thief';
+      this.levelData = window.MAPDATA;
+      this.worldObjects = [];
+      this.guards = [];
+      this.cameras_ = [];
+      this.keyObjs = [];
+      this.lockedDoors = [];
+      this.heldKeys = new Set();
       this.sound_ = new SoundSystem();             // (named sound_ : Phaser scenes already own a `sound` plugin)
-      this.thief = { x: D.start.x, y: D.start.y, hidden: false, hideSpotId: null };
+      this.thief = { x: this.levelData.start.x, y: this.levelData.start.y, hidden: false, hideSpotId: null };
       this.rng = Math.random;
 
-      this.buildWorldObjects();
-      this.buildCharacters();
-      this.buildDarkness();
-      this.buildFX();
       this.buildInput();
+      this.loadLevel(1);
 
-      // camera
       const cam = this.cameras.main;
-      cam.setBounds(0, 0, D.W, D.H);
       cam.setZoom(this.computeZoom());
       cam.setBackgroundColor('#04060b');
       cam.centerOn(560, 1000);
@@ -248,10 +457,43 @@
       // sound events -> every guard decides whether it hears it
       this.sound_.onEmit((ev) => { for (const g of this.guards) g.logic.hear(ev); });
 
-      this.resetMatch();
       this.hudTimer = 0; this.lastHud = {};
       this.bindUI();
+      this.renderLevelCards();
       window.__game = this;                        // handy for debugging in the console
+    }
+
+    loadLevel(levelId) {
+      const D = levelId === 2 && window.LEVEL2_DATA ? window.LEVEL2_DATA : window.MAPDATA;
+      this.currentLevel = levelId === 2 && window.LEVEL2_DATA ? 2 : 1;
+      this.levelData = D;
+
+      // Clean up previous level display objects
+      for (const obj of this.worldObjects) { if (obj && obj.destroy) obj.destroy(); }
+      this.worldObjects = [];
+      for (const g of this.guards) {
+        if (g.sprite) g.sprite.destroy();
+        if (g.shadow) g.shadow.destroy();
+        if (g.icon) g.icon.destroy();
+      }
+      this.guards = [];
+      if (this.thiefShadow) { this.thiefShadow.destroy(); this.thiefShadow = null; }
+      if (this.thiefSprite) { this.thiefSprite.destroy(); this.thiefSprite = null; }
+      if (this.darkImg) { this.darkImg.destroy(); this.darkImg = null; }
+      if (this.textures && this.textures.exists && this.textures.exists('dark')) {
+        if (this.textures.remove) this.textures.remove('dark');
+      }
+      if (this.fx) { this.fx.destroy(); this.fx = null; }
+
+      this.world = new World(D);
+      this.nav = new NavMesh(this.world);
+      this.buildWorldObjects();
+      this.buildCharacters();
+      this.buildDarkness();
+      this.buildFX();
+
+      this.cameras.main.setBounds(0, 0, D.W, D.H);
+      this.resetMatch();
     }
 
     computeZoom() {
@@ -261,10 +503,13 @@
 
     /* ------------------------------ construction --------------------------- */
     buildWorldObjects() {
-      this.add.image(0, 0, 'map').setOrigin(0, 0).setDepth(0);
+      const D = this.levelData;
+      const track = (o) => { this.worldObjects.push(o); return o; };
+      const mapKey = this.currentLevel === 2 ? 'prison_map' : 'map';
+      track(this.add.image(0, 0, mapKey).setOrigin(0, 0).setDepth(0));
 
       // creaky floorboards (decor) and doors (decor) - subtle hints for attentive players
-      const deco = this.add.graphics().setDepth(2);
+      const deco = track(this.add.graphics().setDepth(2));
       D.boards.forEach(([x, y, w, h]) => {
         deco.lineStyle(1, 0xd2a46a, 0.22);
         for (let i = 0; i < 4; i++) { const yy = y - h / 2 + (i + 0.5) * (h / 4); deco.lineBetween(x - w / 2, yy, x + w / 2, yy); }
@@ -275,30 +520,57 @@
       this.doors = D.doors.map((d) => ({ id: d.id, x0: d.x - d.w / 2, y0: d.y - d.h / 2, x1: d.x + d.w / 2, y1: d.y + d.h / 2, inside: false, cd: 0 }));
       this.hideSpots = D.hideSpots;
 
+      // locked prison doors (Level 2)
+      this.lockedDoors = (D.lockedDoors || []).map((ld) => {
+        const w = ld.x1 - ld.x0, h = ld.y1 - ld.y0;
+        const cx = (ld.x0 + ld.x1) / 2, cy = (ld.y0 + ld.y1) / 2;
+        const gfx = track(this.add.graphics().setDepth(cy));
+        gfx.fillStyle(0x1f2633, 0.95);
+        gfx.fillRect(ld.x0, ld.y0, w, h);
+        gfx.lineStyle(2, 0xff4a5a, 0.9);
+        gfx.strokeRect(ld.x0, ld.y0, w, h);
+        gfx.lineStyle(2, 0x7e8da6, 0.9);
+        for (let bx = ld.x0 + 8; bx < ld.x1; bx += 10) gfx.lineBetween(bx, ld.y0 + 2, bx, ld.y1 - 2);
+        const led = track(this.add.rectangle(cx, cy, 8, 8, 0xff3b4a).setDepth(cy + 1));
+        return { def: ld, cx, cy, gfx, led, unlocked: false };
+      });
+
       // loot chests
       this.lootObjs = D.loot.map((l) => {
-        const sprite = this.add.image(l.x, l.y, l.sprite).setDepth(l.y - 18);
-        const glow = this.add.image(l.x, l.y, 'glow').setBlendMode(Phaser.BlendModes.ADD).setTint(0xffc94a).setScale(1.5).setAlpha(0.28).setDepth(5050);
-        const spark = this.add.image(l.x + 12, l.y - 24, 'sparkle').setDepth(5060).setScale(1.6);
+        const sprite = track(this.add.image(l.x, l.y, l.sprite).setDepth(l.y - 18));
+        const glow = track(this.add.image(l.x, l.y, 'glow').setBlendMode(Phaser.BlendModes.ADD).setTint(0xffc94a).setScale(1.5).setAlpha(0.28).setDepth(5050));
+        const spark = track(this.add.image(l.x + 12, l.y - 24, 'sparkle').setDepth(5060).setScale(1.6));
         this.tweens.add({ targets: [glow], alpha: { from: 0.16, to: 0.36 }, scale: { from: 1.3, to: 1.7 }, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
         this.tweens.add({ targets: [spark], alpha: { from: 0.1, to: 1 }, angle: 90, duration: 700 + Math.random() * 400, yoyo: true, repeat: -1 });
         return { def: l, sprite, glow, spark, collected: false };
       });
 
+      // keys (Level 2)
+      this.keyObjs = (D.keys || []).map((k) => {
+        const sprite = track(this.add.image(k.x, k.y, 'key_item').setTint(k.color || 0x5aa9ff).setScale(1.35).setDepth(k.y));
+        const glow = track(this.add.image(k.x, k.y, 'glow').setBlendMode(Phaser.BlendModes.ADD).setTint(k.color || 0x5aa9ff).setScale(1.1).setAlpha(0.32).setDepth(5050));
+        this.tweens.add({ targets: [sprite], y: k.y - 3, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+        return { def: k, sprite, glow, collected: false };
+      });
+
       // noisy floor props
       this.propObjs = D.props.map((p) => {
-        const sprite = this.add.image(p.x, p.y, p.t === 'glass' ? 'glass' : 'metal').setOrigin(0.5, 0.9).setScale(1.25).setDepth(p.y);
-        const shadow = this.add.image(p.x, p.y + 1, 'shadow').setScale(0.5).setDepth(p.y - 1);
+        const sprite = track(this.add.image(p.x, p.y, p.t === 'glass' ? 'glass' : 'metal').setOrigin(0.5, 0.9).setScale(1.25).setDepth(p.y));
+        const shadow = track(this.add.image(p.x, p.y + 1, 'shadow').setScale(0.5).setDepth(p.y - 1));
         return { def: p, sprite, shadow, triggered: false };
       });
 
+      // security cameras (Level 2)
+      this.cameras_ = (D.cameras || []).map((c) => new SecurityCamera(c, this.world));
+
       // exit beacon
       this.exitCenter = { x: (D.exit.x0 + D.exit.x1) / 2, y: (D.exit.y0 + D.exit.y1) / 2 };
-      this.exitGlow = this.add.image(this.exitCenter.x, this.exitCenter.y + 20, 'glow').setBlendMode(Phaser.BlendModes.ADD).setTint(0x33ff77).setScale(3.4).setDepth(5050).setAlpha(0.15);
+      this.exitGlow = track(this.add.image(this.exitCenter.x, this.exitCenter.y + 20, 'glow').setBlendMode(Phaser.BlendModes.ADD).setTint(0x33ff77).setScale(3.4).setDepth(5050).setAlpha(0.15));
       this.tweens.add({ targets: this.exitGlow, scale: { from: 3.0, to: 3.8 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     }
 
     buildCharacters() {
+      const D = this.levelData;
       const S = CFG.SPRITE_SCALE;
       this.thiefShadow = this.add.image(0, 0, 'shadow').setScale(1.1).setAlpha(0.9);
       this.thiefSprite = this.add.sprite(0, 0, 'thief', 'idle_down_0').setOrigin(0.5, 1).setScale(S);
@@ -315,6 +587,7 @@
     }
 
     buildDarkness() {
+      const D = this.levelData;
       this.DW = Math.ceil(D.W / 2); this.DH = Math.ceil(D.H / 2);       // half resolution is plenty for soft light
       this.darkTex = this.textures.createCanvas('dark', this.DW, this.DH);
       this.dctx = this.darkTex.getContext('2d');
@@ -332,7 +605,7 @@
       const KC = Phaser.Input.Keyboard.KeyCodes;
       this.keys = this.input.keyboard.addKeys({
         w: KC.W, a: KC.A, s: KC.S, d: KC.D, up: KC.UP, down: KC.DOWN, left: KC.LEFT, right: KC.RIGHT,
-        shift: KC.SHIFT, q: KC.Q, e: KC.E, space: KC.SPACE, p: KC.P, esc: KC.ESC, m: KC.M, r: KC.R,
+        shift: KC.SHIFT, q: KC.Q, e: KC.E, space: KC.SPACE, p: KC.P, esc: KC.ESC, m: KC.M, r: KC.R, f: KC.F,
       });
     }
 
@@ -341,21 +614,29 @@
       const on = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', (e) => { this.ensureAudio(); sfx.click(); fn(e); if (e.currentTarget && e.currentTarget.blur) e.currentTarget.blur(); }); };
       // menus
       on('btn-play', () => this.showScreen('roles'));
-      on('btn-start', () => this.startMatch());                 // "Play as Thief"
+      on('btn-start', () => { this.selectedRole = 'thief'; this.openLevelSelect(); }); // Character -> Level Selection
       on('btn-roles-back', () => this.showScreen('menu'));
+      on('btn-levels-back', () => this.showScreen('roles'));
       on('btn-howto', () => this.showScreen('howto'));
       on('btn-howto-back', () => this.showScreen('menu'));
       on('btn-settings', () => this.openSettings('menu'));
       on('btn-settings-pause', () => this.openSettings('pause'));
       on('btn-settings-back', () => this.closeSettings());
       on('btn-gear', () => { if (this.state === 'PLAYING') { this.togglePause(); this.openSettings('pause'); } });
+      on('btn-fullscreen', () => this.toggleFullscreen());
+      on('btn-fullscreen-menu', () => this.toggleFullscreen());
+      if (document.addEventListener) {
+        document.addEventListener('fullscreenchange', () => this.updateFullscreenIcons());
+      }
       // in-game
       on('btn-pause', () => this.togglePause());
       on('btn-resume', () => this.togglePause());
-      on('btn-restart', () => this.startMatch());
-      on('btn-restart-pause', () => this.startMatch());
-      on('btn-retry-over', () => this.startMatch());
-      on('btn-retry-win', () => this.startMatch());
+      on('btn-restart', () => this.startMatch(this.currentLevel));
+      on('btn-restart-pause', () => this.startMatch(this.currentLevel));
+      on('btn-retry-over', () => this.startMatch(this.currentLevel));
+      on('btn-retry-win', () => this.startMatch(this.currentLevel));
+      on('btn-next-win', () => this.startMatch(2));
+      on('btn-levels-win', () => this.toLevelSelect());
       on('btn-menu-pause', () => this.toMenu());
       on('btn-menu-over', () => this.toMenu());
       on('btn-menu-win', () => this.toMenu());
@@ -417,25 +698,155 @@
     }
 
     showScreen(name) {
-      ['menu', 'roles', 'howto', 'settings', 'pause', 'over', 'win'].forEach((n) => $('screen-' + n).classList.toggle('hidden', n !== name));
+      ['menu', 'roles', 'levels', 'howto', 'settings', 'pause', 'over', 'win'].forEach((n) => {
+        const el = $('screen-' + n);
+        if (el) el.classList.toggle('hidden', n !== name);
+      });
+      const fsMenu = $('btn-fullscreen-menu');
+      if (fsMenu) fsMenu.classList.toggle('hidden', name === 'none');
+    }
+
+    toggleFullscreen() {
+      try {
+        if (!document.fullscreenElement) {
+          const target = document.documentElement;
+          if (target && target.requestFullscreen) target.requestFullscreen();
+        } else if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      } catch (e) { /* fullscreen not supported */ }
+    }
+
+    updateFullscreenIcons() {
+      const isFs = !!(typeof document !== 'undefined' && document.fullscreenElement);
+      const html = ICONS[isFs ? 'exitFullscreen' : 'fullscreen'] || '';
+      ['btn-fullscreen', 'btn-fullscreen-menu'].forEach((id) => {
+        const btn = $(id);
+        if (btn && btn.querySelector) {
+          const ic = btn.querySelector('.ic');
+          if (ic) ic.innerHTML = html;
+        }
+      });
+    }
+
+    openLevelSelect() {
+      const rn = $('level-role-name');
+      if (rn) rn.textContent = (this.selectedRole || 'thief').toUpperCase();
+      this.renderLevelCards();
+      this.showScreen('levels');
+    }
+
+    renderLevelCards() {
+      const grid = $('level-cards');
+      if (!grid || !document.createElement) return;
+      grid.innerHTML = '';
+      for (const lv of LEVELS_META) {
+        const unlocked = Progress.isUnlocked(lv.id);
+        const completed = Progress.isCompleted(lv.id);
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.id = 'level-card-' + lv.id;
+        card.className = 'level-card' + (!unlocked ? ' locked' : '') + (completed ? ' completed' : '');
+        card.dataset.level = String(lv.id);
+
+        const statusClass = completed ? 'completed' : unlocked ? 'unlocked' : 'locked';
+        const statusIcon = completed ? ICONS.check : unlocked ? ICONS.play : ICONS.lock;
+        const statusText = completed ? 'COMPLETED' : unlocked ? 'UNLOCKED' : 'LOCKED';
+
+        card.innerHTML =
+          `<div class="level-thumb-wrap">` +
+            `<canvas class="level-thumb" width="240" height="120"></canvas>` +
+            `<span class="level-num">LVL ${lv.id}</span>` +
+            `<span class="level-status-badge ${statusClass}"><i class="ic">${statusIcon}</i>${statusText}</span>` +
+          `</div>` +
+          `<div class="level-body">` +
+            `<h3 class="level-name">${lv.name}</h3>` +
+            `<div class="level-meta">` +
+              `<span>${lv.desc}</span>` +
+              `<span class="level-diff ${lv.diffClass}">${lv.diff.toUpperCase()}</span>` +
+            `</div>` +
+          `</div>`;
+
+        const canvas = card.querySelector ? card.querySelector('canvas') : null;
+        if (canvas) this.drawLevelThumb(canvas, lv.id, unlocked);
+
+        card.addEventListener('click', () => {
+          this.ensureAudio();
+          if (!Progress.isUnlocked(lv.id)) {
+            sfx.deny();
+            this.toast(`Complete Level ${lv.id - 1} to unlock ${lv.name}.`, 2000);
+            return;
+          }
+          if (!lv.playable) {
+            sfx.click();
+            this.toast(`${lv.name} is coming in a future update!`, 2200);
+            return;
+          }
+          sfx.click();
+          this.startMatch(lv.id);
+        });
+        grid.appendChild(card);
+      }
+    }
+
+    drawLevelThumb(canvas, id, unlocked) {
+      const ctx = canvas.getContext ? canvas.getContext('2d') : null;
+      if (!ctx) return;
+      const w = canvas.width, h = canvas.height;
+      ctx.fillStyle = '#070a12';
+      ctx.fillRect(0, 0, w, h);
+      if (id === 1 && this.textures && this.textures.exists && this.textures.exists('map')) {
+        const img = this.textures.get('map').getSourceImage();
+        if (img) ctx.drawImage(img, 120, 220, 860, 480, 0, 0, w, h);
+      } else if (id === 2 && this.textures && this.textures.exists && this.textures.exists('prison_map')) {
+        const img = this.textures.get('prison_map').getSourceImage();
+        if (img) ctx.drawImage(img, 420, 420, 960, 520, 0, 0, w, h);
+      } else {
+        const tints = { 3: '#192a2e', 4: '#152538', 5: '#112218', 6: '#201b29', 7: '#2b1219' };
+        ctx.fillStyle = tints[id] || '#121826';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        for (let x = 20; x < w; x += 24) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+        for (let y = 20; y < h; y += 24) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+      }
+      if (!unlocked) {
+        ctx.fillStyle = 'rgba(4, 6, 12, 0.58)';
+        ctx.fillRect(0, 0, w, h);
+      }
     }
 
     /* ------------------------------ match flow ----------------------------- */
-    startMatch() {
-      this.resetMatch();
+    startMatch(levelId = this.currentLevel) {
+      if (levelId !== this.currentLevel) this.loadLevel(levelId);
+      else this.resetMatch();
       this.state = 'PLAYING';
       this.showScreen('none');
       $('hud').classList.remove('hidden');
       $('touch-ui').classList.remove('hidden');
+      const roleEl = $('hud-role-label');
+      if (roleEl) roleEl.textContent = (this.selectedRole || 'thief').toUpperCase();
       this.ensureAudio(); sfx.stopAmbient(); sfx.startAmbient();
       this.cameras.main.startFollow(this.thiefSprite, true, 0.12, 0.12);
-      this.toast(`Steal all ${CFG.LOOT_NEEDED} treasures, then reach the EXIT.`, 4200);
+      if (this.currentLevel === 2) {
+        this.toast('Find 3 keys, steal 3 treasures, avoid guards & cameras, then escape!', 4600);
+      } else {
+        this.toast(`Steal all ${this.lootNeeded} treasures, then reach the EXIT.`, 4200);
+      }
+    }
+
+    toLevelSelect() {
+      this.resetMatch();
+      this.state = 'MENU';
+      this.cameras.main.stopFollow(); this.cameras.main.centerOn(this.levelData.W / 2, this.levelData.H * 0.7);
+      $('hud').classList.add('hidden'); $('prompt').classList.add('hidden'); $('toast').classList.add('hidden'); $('touch-ui').classList.add('hidden');
+      this.openLevelSelect();
+      sfx.stopAmbient();
     }
 
     toMenu() {
       this.resetMatch();
       this.state = 'MENU';
-      this.cameras.main.stopFollow(); this.cameras.main.centerOn(560, 1000);
+      this.cameras.main.stopFollow(); this.cameras.main.centerOn(this.levelData.W / 2, this.levelData.H * 0.7);
       $('hud').classList.add('hidden'); $('prompt').classList.add('hidden'); $('toast').classList.add('hidden'); $('touch-ui').classList.add('hidden');
       this.showScreen('menu');
       sfx.stopAmbient();
@@ -450,9 +861,13 @@
     }
 
     resetMatch() {
-      this.matchTime = CFG.MATCH_TIME;
+      const D = this.levelData;
+      this.matchTime = D.matchTime || CFG.MATCH_TIME;
+      this.lootNeeded = D.loot.length;
+      this.keysNeeded = D.keys ? D.keys.length : 0;
       this.stamina = CFG.STAM_MAX; this.exhausted = false;
-      this.whistleCd = 0; this.lootCount = 0; this.exitOpen = false;
+      this.whistleCd = 0; this.lootCount = 0; this.keysCollected = 0; this.exitOpen = false;
+      this.heldKeys.clear();
       this.stats = { time: 0, whistles: 0, spotted: 0 };
       this.stepTimer = 0; this.boardCd = 0; this.hideLock = 0; this.moving = false; this.running = false;
       this.noiseLevel = 0; this.exitHintCd = 0; this.target = null;
@@ -460,17 +875,28 @@
       this.thiefDir = 'down'; this.thiefAnim = '';
       this.thiefSprite.clearTint().setAlpha(1);
       this.lootObjs.forEach((o) => { o.collected = false; o.sprite.setVisible(true).setAlpha(1).setScale(1).setPosition(o.def.x, o.def.y); o.glow.setVisible(true); o.spark.setVisible(true); });
+      this.keyObjs.forEach((k) => { k.collected = false; k.sprite.setVisible(true).setAlpha(1).setScale(1.35).setPosition(k.def.x, k.def.y); k.glow.setVisible(true); });
+      this.lockedDoors.forEach((ld) => {
+        ld.unlocked = false;
+        ld.gfx.setVisible(true).setAlpha(1);
+        ld.led.setVisible(true).setFillStyle(0xff3b4a);
+        this.world.setRectBlocked(ld.def.x0, ld.def.y0, ld.def.x1, ld.def.y1, true, true);
+        this.nav.rebuildArea(ld.def.x0, ld.def.y0, ld.def.x1, ld.def.y1);
+      });
       this.propObjs.forEach((o) => {
         o.triggered = false;
         o.sprite.setTexture(o.def.t === 'glass' ? 'glass' : 'metal').setAngle(0).setOrigin(0.5, 0.9).setPosition(o.def.x, o.def.y);
         o.shadow.setVisible(true);
       });
       this.doors.forEach((d) => { d.inside = false; d.cd = 0; });
+      this.cameras_.forEach((c) => c.reset());
       this.sound_.clear();
       for (const g of this.guards) {
         g.logic.reset(); g.curKey = ''; g.prevSusp = 0; g.icon.setVisible(false);
         g.logic._refreshFan();
       }
+      const keysBox = $('hud-keys-box');
+      if (keysBox) keysBox.classList.toggle('hidden', this.keysNeeded === 0);
       $('toast').classList.add('hidden');
       this.lastHud = {};
       this.updateHud(true);
@@ -483,16 +909,29 @@
       this.cameras.main.stopFollow();
       $('prompt').classList.add('hidden'); $('toast').classList.add('hidden'); $('touch-ui').classList.add('hidden');
       const timeStr = fmtTime(this.stats.time);
-      const stats = `Time: ${timeStr} &nbsp;|&nbsp; Loot: ${this.lootCount}/3 &nbsp;|&nbsp; Whistles: ${this.stats.whistles} &nbsp;|&nbsp; Times spotted: ${this.stats.spotted}`;
+      const keyStat = this.keysNeeded > 0 ? `Keys: ${this.keysCollected}/${this.keysNeeded} &nbsp;|&nbsp; ` : '';
+      const stats = `Time: ${timeStr} &nbsp;|&nbsp; ${keyStat}Loot: ${this.lootCount}/${this.lootNeeded} &nbsp;|&nbsp; Whistles: ${this.stats.whistles} &nbsp;|&nbsp; Times spotted: ${this.stats.spotted}`;
       if (reason === 'win') {
         sfx.victory(); vibrate([60, 40, 60, 40, 160]);
+        Progress.completeLevel(this.currentLevel);
+        this.renderLevelCards();
+        const winText = $('win-text');
+        if (winText) {
+          winText.textContent = this.currentLevel === 2
+            ? 'You escaped the underground prison with all the keys and loot!'
+            : 'You vanished into the night with all the loot. The guards never saw a thing.';
+        }
+        const nextBtn = $('btn-next-win');
+        if (nextBtn) nextBtn.classList.toggle('hidden', this.currentLevel !== 1);
         $('win-stats').innerHTML = stats;
         this.time.delayedCall(700, () => this.showScreen('win'));
       } else {
         if (reason === 'captured') { sfx.capture(); vibrate(300); this.cameras.main.shake(350, 0.012); this.thiefSprite.setTint(0xff5a5a); }
         else sfx.alert();
         $('over-title').textContent = reason === 'captured' ? 'CAUGHT' : 'DAWN BREAKS';
-        $('over-text').textContent = reason === 'captured' ? 'A guard caught you in the dark. The mansion keeps its secrets.' : 'Time ran out. The guards sealed every exit before you could escape.';
+        $('over-text').textContent = reason === 'captured'
+          ? (this.currentLevel === 2 ? 'A prison guard caught you in the dark.' : 'A guard caught you in the dark. The mansion keeps its secrets.')
+          : 'Time ran out. The guards sealed every exit before you could escape.';
         $('over-stats').innerHTML = stats;
         this.time.delayedCall(900, () => this.showScreen('over'));
       }
@@ -524,13 +963,14 @@
       const K = Phaser.Input.Keyboard;
 
       if (K.JustDown(this.keys.m)) this.toggleSound();
+      if (this.keys.f && K.JustDown(this.keys.f)) this.toggleFullscreen();
       if (K.JustDown(this.keys.p) || K.JustDown(this.keys.esc)) {
-        const open = (id) => !$('screen-' + id).classList.contains('hidden');
+        const open = (id) => { const el = $('screen-' + id); return el && !el.classList.contains('hidden'); };
         if (this.state === 'PAUSED' && open('settings')) this.closeSettings();                       // Esc: back out of settings first
         else if (this.state === 'PLAYING' || this.state === 'PAUSED') this.togglePause();
-        else if (this.state === 'MENU') { if (open('settings')) this.closeSettings(); else if (open('roles') || open('howto')) this.showScreen('menu'); }
+        else if (this.state === 'MENU') { if (open('settings')) this.closeSettings(); else if (open('levels')) this.showScreen('roles'); else if (open('roles') || open('howto')) this.showScreen('menu'); }
       }
-      if (K.JustDown(this.keys.r) && (this.state === 'PLAYING' || this.state === 'OVER')) { sfx.init(); this.startMatch(); }
+      if (K.JustDown(this.keys.r) && (this.state === 'PLAYING' || this.state === 'OVER')) { sfx.init(); this.startMatch(this.currentLevel); }
 
       if (this.state === 'PLAYING') {
         this.simulate(dt);
@@ -565,6 +1005,16 @@
       this.handleActions();
 
       if (this.state !== 'PLAYING') return;
+      for (const cam of this.cameras_) {
+        if (cam.update(dt, this.thief)) {
+          this.stats.spotted++;
+          sfx.cameraAlert();
+          vibrate([80, 40, 80]);
+          this.cameras.main.shake(130, 0.004);
+          this.sound_.emit('slam', this.thief.x, this.thief.y);
+          this.toast('SECURITY CAMERA! Guards alerted!', 2600);
+        }
+      }
       for (const g of this.guards) {
         g.logic.update(dt);
         if (this.state !== 'PLAYING') return;                 // a capture may have ended the match
@@ -666,6 +1116,19 @@
         const d = dist(th.x, th.y, o.def.x, o.def.y);
         if (d <= CFG.LOOT_RANGE && d < bd) { bd = d; best = { kind: 'loot', obj: o, name: o.def.name }; }
       });
+      this.keyObjs.forEach((k) => {
+        if (k.collected) return;
+        const d = dist(th.x, th.y, k.def.x, k.def.y);
+        if (d <= CFG.LOOT_RANGE && d < bd) { bd = d; best = { kind: 'key', obj: k, name: k.def.name }; }
+      });
+      this.lockedDoors.forEach((ld) => {
+        if (ld.unlocked) return;
+        const d = dist(th.x, th.y, ld.cx, ld.cy);
+        if (d <= CFG.DOOR_RANGE && d + 10 < bd) {
+          bd = d + 10;
+          best = { kind: 'door', door: ld, name: ld.def.name, hasKey: this.heldKeys.has(ld.def.keyId) };
+        }
+      });
       this.hideSpots.forEach((h) => {
         const d = dist(th.x, th.y, h.x, h.y);
         if (d <= h.r && d + 18 < bd) { bd = d + 18; best = { kind: 'hide', spot: h, name: h.name }; }
@@ -712,6 +1175,44 @@
         return;
       }
       if (tg.kind === 'loot') this.collectLoot(tg.obj);
+      else if (tg.kind === 'key') this.collectKey(tg.obj);
+      else if (tg.kind === 'door') this.tryUnlockDoor(tg.door);
+    }
+
+    collectKey(k) {
+      k.collected = true;
+      this.keysCollected++;
+      this.heldKeys.add(k.def.id);
+      sfx.pickup(); vibrate(30);
+      k.glow.setVisible(false);
+      this.tweens.add({ targets: k.sprite, y: k.def.y - 28, alpha: 0, scale: 1.7, duration: 420, ease: 'Cubic.out', onComplete: () => k.sprite.setVisible(false) });
+      this.floatText(k.def.x, k.def.y - 26, '+1 KEY', '#5aa9ff', 15);
+      this.toast(`Collected ${k.def.name} (${this.keysCollected}/${this.keysNeeded})`, 2200);
+      this.checkObjectivesUnlock();
+    }
+
+    tryUnlockDoor(ld) {
+      if (ld.unlocked) return;
+      if (!this.heldKeys.has(ld.def.keyId)) {
+        sfx.deny();
+        this.toast(`Locked! Requires ${ld.def.keyName}.`, 2000);
+        return;
+      }
+      ld.unlocked = true;
+      ld.led.setFillStyle(0x3dff85);
+      this.world.setRectBlocked(ld.def.x0, ld.def.y0, ld.def.x1, ld.def.y1, false);
+      this.nav.rebuildArea(ld.def.x0, ld.def.y0, ld.def.x1, ld.def.y1);
+      sfx.doorUnlock(); vibrate(40);
+      this.tweens.add({ targets: [ld.gfx, ld.led], alpha: 0, duration: 350, onComplete: () => { ld.gfx.setVisible(false); ld.led.setVisible(false); } });
+      this.floatText(ld.cx, ld.cy - 20, 'UNLOCKED', '#3dff85', 14);
+      this.toast(`Unlocked ${ld.def.name}!`, 2000);
+    }
+
+    checkObjectivesUnlock() {
+      if (this.lootCount >= this.lootNeeded && this.keysCollected >= this.keysNeeded && !this.exitOpen) {
+        this.exitOpen = true; sfx.exitOpen();
+        this.toast(this.currentLevel === 2 ? 'EXIT OPEN! Reach the Escape Tunnel (bottom right)!' : 'EXIT OPEN! Head to the green door (top right).', 4200);
+      }
     }
 
     collectLoot(o) {
@@ -724,17 +1225,25 @@
         const a = (i / 12) * Math.PI * 2, r = this.add.rectangle(o.def.x, o.def.y - 10, 4, 4, i % 2 ? 0xfff2a0 : 0xffb830).setDepth(5150);
         this.tweens.add({ targets: r, x: o.def.x + Math.cos(a) * 46, y: o.def.y - 10 + Math.sin(a) * 36, alpha: 0, duration: 520, ease: 'Cubic.out', onComplete: () => r.destroy() });
       }
-      if (this.lootCount >= CFG.LOOT_NEEDED && !this.exitOpen) {
-        this.exitOpen = true; sfx.exitOpen(); this.toast('EXIT OPEN! Head to the green door (top right).', 4000);
-      } else this.toast(`Loot ${this.lootCount}/${CFG.LOOT_NEEDED}`, 1400);
+      if (this.lootCount >= this.lootNeeded && this.keysCollected >= this.keysNeeded) {
+        this.checkObjectivesUnlock();
+      } else {
+        this.toast(`Loot ${this.lootCount}/${this.lootNeeded}`, 1400);
+      }
     }
 
     checkExit(dt) {
-      const th = this.thief, e = D.exit;
+      const D = this.levelData, th = this.thief, e = D.exit;
       this.exitHintCd -= dt;
       if (th.x > e.x0 && th.x < e.x1 && th.y > e.y0 && th.y < e.y1) {
         if (this.exitOpen) { this.endGame('win'); }
-        else if (this.exitHintCd <= 0) { this.exitHintCd = 2.5; this.toast(`The exit is locked - you need ${CFG.LOOT_NEEDED} treasures.`, 2000); sfx.deny(); }
+        else if (this.exitHintCd <= 0) {
+          this.exitHintCd = 2.5;
+          const msg = this.keysNeeded > 0
+            ? `The exit is locked - collect all ${this.keysNeeded} keys & ${this.lootNeeded} treasures.`
+            : `The exit is locked - you need ${this.lootNeeded} treasures.`;
+          this.toast(msg, 2200); sfx.deny();
+        }
       }
     }
 
@@ -788,8 +1297,8 @@
     }
 
     /* ------------------------------ lighting -------------------------------- */
-    renderDarkness() {
-      const c = this.dctx, W = this.DW, H = this.DH;
+    renderDarkness(time) {
+      const c = this.dctx, W = this.DW, H = this.DH, D = this.levelData;
       c.setTransform(1, 0, 0, 1, 0, 0);
       c.globalCompositeOperation = 'source-over';
       c.fillStyle = `rgba(3,5,12,${CFG.AMBIENT})`;
@@ -803,13 +1312,32 @@
         g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(0.55, `rgba(0,0,0,${a * 0.55})`); g.addColorStop(1, 'rgba(0,0,0,0)');
         c.fillStyle = g; c.fillRect(x - r, y - r, r * 2, r * 2);
       };
-      for (const l of STATIC_LIGHTS) glowAt(l[0], l[1], l[2], l[3]);
+      const lights = D.lights || STATIC_LIGHTS;
+      for (let i = 0; i < lights.length; i++) {
+        const l = lights[i];
+        let str = l[3];
+        if (l[4] === 'flicker') {
+          const fl = Math.sin((time || 0) * 0.011 + i * 2.1) * 0.14 + (Math.sin((time || 0) * 0.047 + i) > 0.92 ? -0.22 : 0);
+          str = Math.max(0.12, str + fl);
+        }
+        glowAt(l[0], l[1], l[2], str);
+      }
       this.lootObjs.forEach((o) => { if (!o.collected) glowAt(o.def.x, o.def.y, 38, 0.35); });
+      this.keyObjs.forEach((k) => { if (!k.collected) glowAt(k.def.x, k.def.y, 34, 0.38); });
       glowAt(this.exitCenter.x, this.exitCenter.y + 30, 110, this.exitOpen ? 0.75 : 0.32);
 
       // thief: a faint personal glow so the player can always see themselves
       const th = this.thief;
       if (th.hidden) glowAt(th.x, th.y - 8, 34, 0.25); else glowAt(th.x, th.y - 10, 80, 0.55);
+
+      // security camera detection cones
+      for (const cam of this.cameras_) {
+        const grd = c.createRadialGradient(cam.x, cam.y, 4, cam.x, cam.y, cam.range);
+        grd.addColorStop(0, 'rgba(0,0,0,0.72)'); grd.addColorStop(0.7, 'rgba(0,0,0,0.5)'); grd.addColorStop(1, 'rgba(0,0,0,0)');
+        c.fillStyle = grd; c.beginPath(); c.moveTo(cam.x, cam.y);
+        for (let i = 0; i < cam.fanN; i++) c.lineTo(cam.fanX[i], cam.fanY[i]);
+        c.closePath(); c.fill();
+      }
 
       // guards: body glow + flashlight beam (3 layered polygons => soft edge)
       for (const g of this.guards) {
@@ -820,8 +1348,24 @@
         this.drawBeam(c, L, 1.0, 0.82);
       }
 
-      // warm tint inside the beams
+      // warm tint inside the beams + red warning lights + security camera cones
       c.globalCompositeOperation = 'source-over';
+      for (const l of lights) {
+        if (l[4] === 'red') {
+          const pulse = 0.14 + 0.08 * Math.sin((time || 0) * 0.006);
+          const rg = c.createRadialGradient(l[0], l[1], 4, l[0], l[1], l[2]);
+          rg.addColorStop(0, `rgba(255,45,60,${pulse})`); rg.addColorStop(1, 'rgba(255,45,60,0)');
+          c.fillStyle = rg; c.fillRect(l[0] - l[2], l[1] - l[2], l[2] * 2, l[2] * 2);
+        }
+      }
+      for (const cam of this.cameras_) {
+        const grd = c.createRadialGradient(cam.x, cam.y, 6, cam.x, cam.y, cam.range);
+        grd.addColorStop(0, cam.canSee ? 'rgba(255,60,60,0.34)' : 'rgba(255,90,70,0.18)');
+        grd.addColorStop(1, 'rgba(255,60,60,0)');
+        c.fillStyle = grd; c.beginPath(); c.moveTo(cam.x, cam.y);
+        for (let i = 0; i < cam.fanN; i++) c.lineTo(cam.fanX[i], cam.fanY[i]);
+        c.closePath(); c.fill();
+      }
       for (const g of this.guards) {
         const L = g.logic;
         const grd = c.createRadialGradient(L.ox, L.oy, 8, L.ox, L.oy, L.beamRange);
@@ -881,6 +1425,15 @@
         g.fillStyle(hot ? 0xffb0a0 : 0xfff6c8, 1); g.fillCircle(L.ox + ca * 1.5, L.oy + sa * 1.5, 3);  // lens
       }
 
+      // security cameras (mounted housing + lens + status LED)
+      for (const cam of this.cameras_) {
+        const ca = Math.cos(cam.angle), sa = Math.sin(cam.angle);
+        g.fillStyle(0x161c28, 1); g.fillCircle(cam.x, cam.y, 7);
+        g.lineStyle(3, 0x5c6b85, 1); g.lineBetween(cam.x, cam.y, cam.x + ca * 11, cam.y + sa * 11);
+        g.fillStyle(cam.canSee ? 0xff2b3a : 0xff6a4a, 0.9);
+        g.fillCircle(cam.x + ca * 11, cam.y + sa * 11, 2.5);
+      }
+
       // guard suspicion meters
       for (const gd of this.guards) {
         const L = gd.logic;
@@ -899,8 +1452,12 @@
 
       set('hud-time', fmtTime(this.matchTime));
       cls('hud-time-box', 'danger', this.matchTime <= 30 && this.state === 'PLAYING');
-      set('hud-loot', `${this.lootCount}/${CFG.LOOT_NEEDED}`);
-      cls('hud-loot-box', 'done', this.lootCount >= CFG.LOOT_NEEDED);
+      set('hud-loot', `${this.lootCount}/${this.lootNeeded}`);
+      cls('hud-loot-box', 'done', this.lootCount >= this.lootNeeded);
+      if (this.keysNeeded > 0) {
+        set('hud-keys', `${this.keysCollected}/${this.keysNeeded}`);
+        cls('hud-keys-box', 'done', this.keysCollected >= this.keysNeeded);
+      }
 
       // alert status: LOW / SUSPICIOUS / DETECTED (+ HIDDEN while concealed)
       let level = 0;
@@ -935,15 +1492,22 @@
       const t = this.state === 'PLAYING' ? this.target : null;
       let pr = '';
       if (t) {
-        const verb = t.kind === 'leave' ? 'Leave hiding spot' : t.kind === 'hide' ? `Hide in ${t.name}` : `Take ${t.name}`;
-        pr = IS_TOUCH ? verb : '[E] ' + verb;
+        const verb = t.kind === 'leave' ? 'Leave hiding spot'
+          : t.kind === 'hide' ? `Hide in ${t.name}`
+          : t.kind === 'key' ? `Take ${t.name}`
+          : t.kind === 'door' ? (t.hasKey ? `Unlock ${t.name}` : `${t.name} (Locked)`)
+          : `Take ${t.name}`;
+        pr = IS_TOUCH || (t.kind === 'door' && !t.hasKey) ? verb : '[E] ' + verb;
       }
       if (force || this.lastHud.prompt !== pr) { this.lastHud.prompt = pr; const el = $('prompt'); el.textContent = pr; el.classList.toggle('hidden', !pr); }
-      const kind = t ? t.kind : '';
+      const kind = t ? (t.kind === 'key' || t.kind === 'door' ? 'loot' : t.kind) : '';
       if (force || this.lastHud.kind !== kind) {
         this.lastHud.kind = kind;
         const b = $('t-act'); b.classList.toggle('hidden', !kind);
-        if (kind) { b.dataset.kind = kind; $('t-act-label').textContent = kind === 'loot' ? 'TAKE' : kind === 'hide' ? 'HIDE' : 'LEAVE'; }
+        if (kind) {
+          b.dataset.kind = kind;
+          $('t-act-label').textContent = t.kind === 'key' ? 'KEY' : t.kind === 'door' ? 'UNLOCK' : kind === 'loot' ? 'TAKE' : kind === 'hide' ? 'HIDE' : 'LEAVE';
+        }
       }
     }
   }
