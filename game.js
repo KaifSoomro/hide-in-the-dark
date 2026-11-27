@@ -109,7 +109,16 @@
     check: '<svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>',
     grid: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
   };
-  const IS_TOUCH = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
+  function detectMobileDevice() {
+    const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
+    const noHover = typeof matchMedia !== 'undefined' && matchMedia('(hover: none)').matches;
+    const hasTouch = (typeof window !== 'undefined' && 'ontouchstart' in window) ||
+      (typeof navigator !== 'undefined' && (navigator.maxTouchPoints || 0) > 0);
+    const ua = typeof navigator !== 'undefined' ? (navigator.userAgent || '') : '';
+    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    return !!(coarse || (hasTouch && noHover) || isMobileUA);
+  }
+  let IS_TOUCH = detectMobileDevice();
 
   /* ------------------------------- settings --------------------------------- */
   // Persisted in localStorage (silently ignored if the browser blocks storage).
@@ -459,6 +468,7 @@
 
       this.hudTimer = 0; this.lastHud = {};
       this.bindUI();
+      this.updateHowToPlayDevice();
       this.renderLevelCards();
       window.__game = this;                        // handy for debugging in the console
     }
@@ -698,12 +708,21 @@
     }
 
     showScreen(name) {
+      if (name === 'howto') this.updateHowToPlayDevice();
       ['menu', 'roles', 'levels', 'howto', 'settings', 'pause', 'over', 'win'].forEach((n) => {
         const el = $('screen-' + n);
         if (el) el.classList.toggle('hidden', n !== name);
       });
       const fsMenu = $('btn-fullscreen-menu');
       if (fsMenu) fsMenu.classList.toggle('hidden', name === 'none');
+    }
+
+    updateHowToPlayDevice() {
+      IS_TOUCH = detectMobileDevice();
+      const desk = $('howto-desktop');
+      const mob = $('howto-mobile');
+      if (desk) desk.classList.toggle('hidden', IS_TOUCH);
+      if (mob) mob.classList.toggle('hidden', !IS_TOUCH);
     }
 
     toggleFullscreen() {

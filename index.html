@@ -305,7 +305,7 @@
         <h2 class="screen-title">HOW TO PLAY</h2>
         <div class="panel">
           <div class="controls">
-            <div class="grid">
+            <div class="grid" id="howto-desktop">
               <div>
                 <kbd>W A S D</kbd> / <kbd>&#8592;&#8593;&#8594;&#8595;</kbd>
               </div>
@@ -313,18 +313,24 @@
               <div><kbd>SHIFT</kbd></div>
               <div>Run (fast, loud, drains stamina)</div>
               <div><kbd>E</kbd> / <kbd>SPACE</kbd></div>
-              <div>Take loot &middot; Hide / leave hiding spot</div>
+              <div>Interact &mdash; Take loot/keys, Unlock doors, Hide / leave spot</div>
               <div><kbd>Q</kbd></div>
               <div>Whistle &mdash; lure guards to a spot (8s cooldown)</div>
               <div><kbd>P</kbd> / <kbd>ESC</kbd></div>
               <div>Pause</div>
-              <div><kbd>M</kbd> &nbsp; <kbd>R</kbd></div>
-              <div>Sound on/off &nbsp;&middot;&nbsp; Restart</div>
+              <div><kbd>M</kbd> &nbsp; <kbd>R</kbd> &nbsp; <kbd>F</kbd></div>
+              <div>Sound on/off &nbsp;&middot;&nbsp; Restart &nbsp;&middot;&nbsp; Fullscreen</div>
             </div>
-            <p class="touch-note">
-              On phones: use the joystick and the RUN / WHISTLE buttons. A HIDE
-              or TAKE button appears when you stand next to something.
-            </p>
+            <div class="grid hidden" id="howto-mobile">
+              <div><span class="touch-pill">LEFT JOYSTICK</span></div>
+              <div>Move</div>
+              <div><span class="touch-pill">RUN BUTTON</span></div>
+              <div>Hold to run (fast, loud, drains stamina)</div>
+              <div><span class="touch-pill">ACTION BUTTON</span></div>
+              <div>Take loot/keys &middot; Unlock doors &middot; Hide / leave spot</div>
+              <div><span class="touch-pill">WHISTLE BUTTON</span></div>
+              <div>Lure guards to a spot (8s cooldown)</div>
+            </div>
           </div>
           <ul class="tips">
             <li>

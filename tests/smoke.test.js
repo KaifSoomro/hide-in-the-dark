@@ -311,6 +311,22 @@ function run() {
   );
   click("btn-howto");
   ok(!el("screen-howto").classList.contains("hidden"), "HOW TO PLAY opens");
+  ok(
+    !el("howto-desktop").classList.contains("hidden") &&
+      el("howto-mobile").classList.contains("hidden"),
+    "HOW TO PLAY shows desktop controls on desktop",
+  );
+  // Simulate mobile device (coarse pointer)
+  const origMM = global.matchMedia;
+  global.matchMedia = (q) => ({ matches: q === "(pointer: coarse)" });
+  g.updateHowToPlayDevice();
+  ok(
+    el("howto-desktop").classList.contains("hidden") &&
+      !el("howto-mobile").classList.contains("hidden"),
+    "HOW TO PLAY shows mobile controls on mobile",
+  );
+  global.matchMedia = origMM;
+  g.updateHowToPlayDevice();
   click("btn-howto-back");
   click("btn-play");
   click("btn-start");
